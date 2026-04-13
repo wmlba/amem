@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Associative Memory Dashboard</title>
+<style>
+  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9; --accent: #58a6ff; --green: #3fb950; --red: #f85149; --yellow: #d29922; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .tag { background: var(--accent); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+  .card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; margin-bottom: 12px; }
+  .stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .stat:last-child { border: none; }
+  .stat .label { color: #8b949e; }
+  .stat .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fact { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .fact .predicate { color: var(--accent); }
+  .fact .confidence { color: #8b949e; font-size: 12px; }
+  .memory-entry { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .memory-entry .key { color: var(--accent); font-weight: 600; }
+  .memory-entry .type-badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--border); }
+  .profile-bar { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .profile-bar .bar-bg { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .profile-bar .bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.3s; }
+  .profile-bar .dim-name { width: 140px; font-size: 13px; color: #8b949e; }
+  .profile-bar .dim-value { width: 50px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+  #graph-container { width: 100%; height: 400px; position: relative; }
+  canvas { width: 100%; height: 100%; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.ok { background: var(--green); }
+  .status-dot.warn { background: var(--yellow); }
+  .status-dot.err { background: var(--red); }
+  .refresh-btn { background: var(--border); color: var(--text); border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .refresh-btn:hover { background: #484f58; }
+  .search-box { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; width: 100%; margin-bottom: 12px; }
+  .empty { color: #484f58; font-style: italic; padding: 12px 0; }
+  .full-width { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Associative Memory</h1>
+  <span class="tag">DASHBOARD</span>
+  <div style="flex:1"></div>
+  <span id="status"><span class="status-dot"></span>Loading...</span>
+  <button class="refresh-btn" onclick="refresh()">Refresh</button>
+</div>
+
+<div class="grid">
+  <!-- Stats -->
+  <div class="card">
+    <h2>System Stats</h2>
+    <div id="stats-content"><div class="empty">Loading...</div></div>
+  </div>
+
+  <!-- Behavioral Profile -->
+  <div class="card">
+    <h2>Behavioral Profile</h2>
+    <div id="profile-content"><div class="empty">Loading...</div></div>
+  </div>
+
+  <!-- Explicit Memories -->
+  <div class="card">
+    <h2>Explicit Memories</h2>
+    <div id="explicit-content"><div class="empty">Loading...</div></div>
+  </div>
+
+  <!-- Knowledge Graph Facts -->
+  <div class="card">
+    <h2>Knowledge Graph</h2>
+    <input type="text" class="search-box" id="entity-search" placeholder="Search entity..." onkeyup="searchGraph()">
+    <div id="graph-content"><div class="empty">Loading...</div></div>
+  </div>
+
+  <!-- Contradictions -->
+  <div class="card">
+    <h2>Contradictions</h2>
+    <div id="contradictions-content"><div class="empty">Loading...</div></div>
+  </div>
+
+  <!-- Query Tester -->
+  <div class="card">
+    <h2>Query Tester</h2>
+    <input type="text" class="search-box" id="query-input" placeholder="Ask a question...">
+    <button class="refresh-btn" onclick="runQuery()" style="margin-bottom:12px">Query Memory</button>
+    <div id="query-result"></div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+
+async function fetchJSON(path) {
+  try {
+    const r = await fetch(API + path);
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function postJSON(path, body) {
+  try {
+    const r = await fetch(API + path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function refresh() {
+  // Stats
+  const stats = await fetchJSON('/stats');
+  if (stats) {
+    const ep = stats.episodic || {};
+    const sem = stats.semantic || {};
+    const expl = stats.explicit || {};
+    document.getElementById('stats-content').innerHTML = `
+      <div class="stat"><span class="label">Episodic chunks</span><span class="value">${ep.count || 0}</span></div>
+      <div class="stat"><span class="label">Entities</span><span class="value">${sem.entities || 0}</span></div>
+      <div class="stat"><span class="label">Relations</span><span class="value">${sem.relations || 0}</span></div>
+      <div class="stat"><span class="label">Resolved entities</span><span class="value">${sem.resolved_entities || 0}</span></div>
+      <div class="stat"><span class="label">Explicit memories</span><span class="value">${expl.count || 0}</span></div>
+      <div class="stat"><span class="label">Contradictions</span><span class="value">${sem.contradictions_total || 0} (${sem.contradictions_unresolved || 0} unresolved)</span></div>
+      <div class="stat"><span class="label">Persistence</span><span class="value">${stats.persistence || 'file'}</span></div>
+    `;
+    document.getElementById('status').innerHTML = '<span class="status-dot ok"></span>Connected';
+  } else {
+    document.getElementById('status').innerHTML = '<span class="status-dot err"></span>Disconnected';
+  }
+
+  // Profile
+  const profile = await fetchJSON('/profile');
+  if (profile && profile.priors) {
+    const dims = profile.priors;
+    let html = '';
+    for (const [name, data] of Object.entries(dims)) {
+      const pct = Math.round(data.value * 100);
+      html += `<div class="profile-bar">
+        <span class="dim-name">${name.replace(/_/g,' ')}</span>
+        <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <span class="dim-value">${pct}%</span>
+      </div>`;
+    }
+    document.getElementById('profile-content').innerHTML = html || '<div class="empty">No profile data yet</div>';
+  }
+
+  // Explicit
+  const explicit = await fetchJSON('/explicit');
+  if (explicit && explicit.length) {
+    let html = '';
+    for (const e of explicit) {
+      html += `<div class="memory-entry"><span class="type-badge">${e.entry_type}</span> <span class="key">${e.key}</span>: ${e.value}</div>`;
+    }
+    document.getElementById('explicit-content').innerHTML = html;
+  } else {
+    document.getElementById('explicit-content').innerHTML = '<div class="empty">No explicit memories</div>';
+  }
+
+  // Graph entities
+  const entities = await fetchJSON('/graph/entities');
+  if (entities && entities.entities && entities.entities.length) {
+    let html = '';
+    for (const e of entities.entities.slice(0, 20)) {
+      html += `<div class="fact"><strong>${e.name || e.key}</strong> <span class="confidence">(${e.entity_type}, mentions: ${e.mention_count || 1})</span></div>`;
+    }
+    document.getElementById('graph-content').innerHTML = html;
+  } else {
+    document.getElementById('graph-content').innerHTML = '<div class="empty">No entities in graph</div>';
+  }
+
+  // Contradictions
+  const contras = await fetchJSON('/graph/contradictions');
+  if (contras && contras.contradictions && contras.contradictions.length) {
+    let html = '';
+    for (const c of contras.contradictions) {
+      const fa = c.fact_a || {};
+      const fb = c.fact_b || {};
+      const status = c.resolution === 'unresolved' ? '&#9888;' : '&#10003;';
+      html += `<div class="fact">${status} <span class="predicate">${c.contradiction_type}</span>: "${fa.subject} ${fa.predicate} ${fa.object}" vs "${fb.subject} ${fb.predicate} ${fb.object}" <span class="confidence">[${c.resolution}]</span></div>`;
+    }
+    document.getElementById('contradictions-content').innerHTML = html;
+  } else {
+    document.getElementById('contradictions-content').innerHTML = '<div class="empty">No contradictions detected</div>';
+  }
+}
+
+async function searchGraph() {
+  const q = document.getElementById('entity-search').value.trim();
+  if (!q) { refresh(); return; }
+  const result = await postJSON('/graph/query', { entities: [q], max_depth: 2 });
+  if (result && result.facts && result.facts.length) {
+    let html = '';
+    for (const f of result.facts) {
+      html += `<div class="fact"><strong>${f.subject}</strong> <span class="predicate">${f.predicate}</span> <strong>${f.object}</strong> <span class="confidence">(conf: ${f.confidence})</span></div>`;
+    }
+    document.getElementById('graph-content').innerHTML = html;
+  } else {
+    document.getElementById('graph-content').innerHTML = `<div class="empty">No facts found for "${q}"</div>`;
+  }
+}
+
+async function runQuery() {
+  const q = document.getElementById('query-input').value.trim();
+  if (!q) return;
+  document.getElementById('query-result').innerHTML = '<div class="empty">Querying...</div>';
+  const result = await postJSON('/query', { query: q, top_k: 5 });
+  if (result && result.context_text) {
+    document.getElementById('query-result').innerHTML = `<pre style="white-space:pre-wrap;font-size:13px;color:var(--text);max-height:300px;overflow:auto">${result.context_text}</pre>
+    <div class="stat" style="margin-top:8px"><span class="label">Tokens</span><span class="value">${result.tokens_estimate}</span></div>`;
+  } else {
+    document.getElementById('query-result').innerHTML = '<div class="empty">No results</div>';
+  }
+}
+
+document.getElementById('query-input').addEventListener('keydown', e => { if(e.key==='Enter') runQuery(); });
+
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

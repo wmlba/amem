@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "associative-memory": {
+      "command": "python3",
+      "args": ["-m", "mcp.server", "--db", "./data/amem.db"],
+      "cwd": "/path/to/associative_memory"
+    }
+  }
+}

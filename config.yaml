@@ -1,0 +1,91 @@
+# ═══════════════════════════════════════════════════════════════════
+# ASSOCIATIVE MEMORY — CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════
+
+# ─── Embedding Provider ───────────────────────────────────────────
+# One model for everything: episodic storage, entity extraction,
+# deduplication, entity resolution. Pick your provider:
+#
+# Option 1: Ollama (local, free, recommended for development)
+#   embedding:
+#     provider: ollama
+#     model: nomic-embed-text
+#     base_url: http://localhost:11434
+#
+# Option 2: OpenAI
+#   embedding:
+#     provider: openai
+#     model: text-embedding-3-small
+#     api_key: sk-...   # or set OPENAI_API_KEY env var
+#
+# Option 3: Any OpenAI-compatible server (vLLM, llama.cpp, LiteLLM, Together, Anyscale, OpenRouter)
+#   embedding:
+#     provider: openai
+#     model: your-model-name
+#     base_url: http://localhost:8000/v1
+#
+# Option 4: Anthropic/Voyage
+#   embedding:
+#     provider: anthropic
+#     model: voyage-3
+#     api_key: ...   # or set VOYAGE_API_KEY env var
+#
+# Option 5: Local sentence-transformers (completely offline, no server needed)
+#   embedding:
+#     provider: local
+#     model: all-MiniLM-L6-v2
+#
+# Option 6: Auto-detect (tries Ollama → local → OpenAI env key)
+#   embedding:
+#     provider: auto
+
+embedding:
+  provider: auto
+
+# ─── Legacy Ollama Config (backward compat) ──────────────────────
+ollama:
+  base_url: "http://localhost:11434"
+  model: "nomic-embed-text"
+  embedding_dim: 768
+
+# ─── Episodic Memory ─────────────────────────────────────────────
+episodic:
+  chunk_sentences: 3
+  chunk_overlap: 1
+  default_top_k: 10
+
+# ─── Vector Index ─────────────────────────────────────────────────
+vector_index:
+  temporal_decay_lambda: 0.01
+  reinforcement_weight: 0.1
+  confidence_default: 1.0
+  ivf_threshold: 10000
+  n_partitions: 64
+
+# ─── Semantic Graph ───────────────────────────────────────────────
+semantic:
+  max_traversal_depth: 2
+  decay_lambda: 0.005
+  min_confidence: 0.05
+  extraction_mode: embedding   # embedding (same model), heuristic, or llm
+
+# ─── Behavioral Profile ──────────────────────────────────────────
+behavioral:
+  signal_window: 50
+  dimensions:
+    - response_depth
+    - formality
+    - domain_expertise
+    - verbosity_preference
+
+# ─── Retrieval ────────────────────────────────────────────────────
+retrieval:
+  token_budget: 4000
+  episodic_weight: 0.4
+  semantic_weight: 0.3
+  explicit_weight: 0.2
+  behavioral_weight: 0.1
+
+# ─── Storage ──────────────────────────────────────────────────────
+storage:
+  data_dir: "./data"

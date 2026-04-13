@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(python3 -m pip install -e \"/Users/walebadr/Desktop/associative_memory[dev]\")",
+      "Bash(python3 -m pip install numpy networkx httpx msgpack fastapi uvicorn click pydantic pyyaml pytest pytest-asyncio)",
+      "Bash(python3 -m pytest tests/ -v --tb=short)",
+      "Bash(python3 -c \"import sqlite3; print\\(sqlite3.sqlite_version\\)\")",
+      "Bash(python3 -m pip install tiktoken)",
+      "Bash(python3 -m pip install mcp)",
+      "Bash(python3 -m pip install \"mcp[cli]\")",
+      "Bash(python3 -m pytest tests/ --co -q)",
+      "Bash(python3 demo.py)",
+      "Bash(python3 /Users/walebadr/Desktop/associative_memory/demo_comparison.py)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Models:', [m['name'] for m in d.get\\('models',[]\\)]\\)\")",
+      "Bash(ollama serve:*)",
+      "Bash(curl -s http://localhost:11434/api/embed -d '{\"model\":\"qwen3.5:35b-a3b-coding-nvfp4\",\"input\":\"test\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Embedding dim:', len\\(d.get\\('embeddings',[[]]\\)[0]\\) if d.get\\('embeddings'\\) else 'FAILED'\\); print\\('Keys:', list\\(d.keys\\(\\)\\)[:5]\\)\")",
+      "Bash(ollama pull:*)",
+      "Bash(python3 -m pytest tests/ --tb=line -q)",
+      "Bash(python3 -m pytest tests/test_integration_real.py -v --tb=short)",
+      "Bash(python3 demo_comparison.py)",
+      "Bash(python3 -c ':*)",
+      "Bash(python3 /Users/walebadr/Desktop/associative_memory/test_real.py)",
+      "Bash(python3 /Users/walebadr/Desktop/associative_memory/eval_scenarios.py)",
+      "Bash(python3 /Users/walebadr/Desktop/associative_memory/eval_evolution.py)",
+      "Bash(python3 /Users/walebadr/Desktop/associative_memory/eval_conversation.py)",
+      "Bash(python3 /Users/walebadr/Desktop/associative_memory/eval_dump_memory.py)",
+      "Bash(find /Users/walebadr/Desktop/associative_memory -name \"*.py\" -type f ! -path \"*__pycache__*\" -exec wc -l {} +)",
+      "Bash(find /Users/walebadr/Desktop/associative_memory/amem -name \"*.py\" -type f ! -path \"*__pycache__*\" -exec wc -l {} +)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)"
+    ]
+  }
+}
