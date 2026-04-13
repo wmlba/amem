@@ -29,12 +29,12 @@
 
 | Metric | Value |
 |---|---|
-| Context waste reduction | **~60% fewer irrelevant tokens injected** |
-| Detail preservation | **100% — no lossy summarization** |
-| Write latency | **< 50ms** (SQLite WAL, write-through) |
-| Query latency | **< 1 second** at 100+ chunks |
-| Python codebase | **12,000+ lines** across **72 files** |
-| Test suite | **212 unit tests + 45 integration tests + 42 scenario evals** |
+| Detail preservation | **100% — no lossy summarization, raw chunks stored verbatim** |
+| Query latency | **44ms avg** at 50 chunks (measured with live Ollama) |
+| Ingest latency | **~300ms** per message (dominated by embedding API call) |
+| Explicit memory latency | **0.03ms** (SQLite WAL, write-through) |
+| Python codebase | **13,900+ lines** across **81 files** |
+| Test suite | **212 unit tests + 6 live-Ollama integration tests + 42 scenario evaluations** |
 
 ---
 

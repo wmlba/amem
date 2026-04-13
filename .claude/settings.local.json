@@ -45,7 +45,14 @@
       "Bash(sed -i '' 's/associative-memory/amem/g' README.md mcp/claude_desktop_config.json)",
       "Bash(sed -i '' 's/Associative Memory/amem/g' README.md LICENSE dashboard/index.html mcp/server.py api/openai_compat.py)",
       "Bash(python3)",
-      "Bash(git commit -m 'Rename to amem everywhere + add deep competitive analysis:*)"
+      "Bash(git commit -m 'Rename to amem everywhere + add deep competitive analysis:*)",
+      "Bash(gh repo:*)",
+      "Bash(brew list:*)",
+      "Bash(brew install:*)",
+      "Bash(/opt/homebrew/bin/gh auth:*)",
+      "Bash(/opt/homebrew/bin/gh repo:*)",
+      "Bash(git commit -m 'Fix README numbers: replace unverified claims with measured values:*)",
+      "Bash(git push:*)"
     ]
   }
 }
