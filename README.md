@@ -27,24 +27,73 @@
 
 ## Why amem?
 
-Current LLM memory stores everything as text blobs and injects **all** of it into **every** context window. amem gives your AI a structured brain instead:
+<table>
+<tr>
+<td width="50%">
+
+### ❌ Current systems
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        amem                                     │
-│                                                                 │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ ┌────────┐ │
-│  │ Episodic │ │ Semantic │ │Behavioral│ │Working │ │Explicit│ │
-│  │          │ │          │ │          │ │        │ │        │ │
-│  │ "I       │ │ "Alice   │ │ "You     │ │ "We're │ │ "My    │ │
-│  │ remember │ │ leads    │ │ prefer   │ │ debug- │ │ name   │ │
-│  │ that     │ │ the ML   │ │ concise  │ │ ging   │ │ is     │ │
-│  │ convo"   │ │ team"    │ │ answers" │ │ auth"  │ │ Will"  │ │
-│  └──────────┘ └──────────┘ └──────────┘ └────────┘ └────────┘ │
-│                        │                                        │
-│              Query-conditioned retrieval                        │
-│              Only inject what's relevant                        │
-└─────────────────────────────────────────────────────────────────┘
+User: "What does Alice work on?"
+
+Memory blob injected (2,400 tokens):
+├── Alice is an ML engineer...
+├── Bob manages infrastructure...
+├── Kitchen renovation costs 45K...
+├── Stock portfolio is 60/40...
+├── Yoga practice 3x per week...
+├── Last month's grocery list...
+└── ... everything else ever said
+```
+
+**All memories. Every query. Always.**
+
+</td>
+<td width="50%">
+
+### ✅ amem
+
+```
+User: "What does Alice work on?"
+
+Memory injected (245 tokens):
+├── 📌 [explicit] role: ML Engineer
+├── 🧠 [episodic] "Alice works on ML
+│   pipelines using Python" (0.87)
+├── 📊 [semantic] Alice →[leads]→ ML Team
+├── 📊 [semantic] Alice →[uses]→ PyTorch
+└── 🎯 [working] Goal: review her PR
+```
+
+**Only what's relevant. Query-conditioned.**
+
+</td>
+</tr>
+</table>
+
+### How it works
+
+```mermaid
+graph LR
+    Q["🔍 Query"] --> IA["Intent Analysis"]
+    IA --> |"current? → boost recency"| R
+
+    subgraph R["Retrieve from 5 layers"]
+        direction TB
+        L1["🧠 Episodic<br/><sub>Vector chunks + temporal decay</sub>"]
+        L2["📊 Semantic<br/><sub>Knowledge graph + entity resolution</sub>"]
+        L3["👤 Behavioral<br/><sub>Communication preferences</sub>"]
+        L4["🎯 Working<br/><sub>Session goals + context</sub>"]
+        L5["📌 Explicit<br/><sub>User-defined facts</sub>"]
+    end
+
+    R --> BA["Budget Allocation<br/><sub>Dynamic per-layer token split</sub>"]
+    BA --> C["📋 Context<br/><sub>245 tokens, not 2400</sub>"]
+
+    style Q fill:#58a6ff,color:#000,stroke:none
+    style C fill:#3fb950,color:#000,stroke:none
+    style IA fill:#bc8cff,color:#000,stroke:none
+    style BA fill:#f0883e,color:#000,stroke:none
 ```
 
 ---

@@ -54,7 +54,10 @@
       "Bash(git commit -m 'Fix README numbers: replace unverified claims with measured values:*)",
       "Bash(git push:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(git commit -m 'Redesign README: competitor-grade layout, local model guide, verified numbers:*)"
+      "Bash(git commit -m 'Redesign README: competitor-grade layout, local model guide, verified numbers:*)",
+      "Bash(git commit -m 'Redesign '\\\\''Why amem'\\\\'' section: side-by-side comparison + Mermaid architecture diagram:*)",
+      "Bash(rm -f .git/index.lock)",
+      "Bash(git commit -m 'Redesign Why amem: side-by-side + Mermaid architecture:*)"
     ]
   }
 }
