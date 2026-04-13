@@ -1,291 +1,243 @@
 <p align="center">
   <h1 align="center">amem</h1>
+  <p align="center"><strong>The five-layer brain for AI agents.</strong></p>
   <p align="center">
-    <strong>Memory infrastructure for AI that actually works.</strong>
+    Episodic · Semantic · Behavioral · Working · Explicit<br/>
+    Five memory layers. One embedding model. Zero LLM calls.
   </p>
-  <p align="center">
-    Five-layer associative memory system that replaces lossy blob injection<br/>
-    with query-conditioned retrieval, temporal reasoning, and self-improving feedback loops.
-  </p>
-  <p align="center">
-    <a href="#quickstart">Quickstart</a> &bull;
-    <a href="#why-this-exists">Why This Exists</a> &bull;
-    <a href="#architecture">Architecture</a> &bull;
-    <a href="#features">Features</a> &bull;
-    <a href="#api-reference">API Reference</a> &bull;
-    <a href="#benchmarks">Benchmarks</a>
-  </p>
+</p>
+
+<p align="center">
+  <a href="https://github.com/wmlba/amem/actions"><img src="https://img.shields.io/badge/tests-212%20passed-brightgreen" alt="Tests"></a>
+  <a href="https://github.com/wmlba/amem/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
+  <a href="https://pypi.org/project/amem"><img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python"></a>
+  <a href="https://github.com/wmlba/amem"><img src="https://img.shields.io/github/stars/wmlba/amem?style=social" alt="Stars"></a>
+</p>
+
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#how-it-works">How It Works</a> ·
+  <a href="#use-with-local-models">Local Models</a> ·
+  <a href="#integrations">Integrations</a> ·
+  <a href="#benchmarks">Benchmarks</a> ·
+  <a href="#docs">Docs</a>
 </p>
 
 ---
 
-> **The problem:** Every major LLM provider stores memory as lossy text blobs injected wholesale into every context window. It's the equivalent of photocopying your entire diary and paper-clipping it to every letter you write.
->
-> **The solution:** An associative memory system modeled after how human brains actually work — episodic, semantic, behavioral, working, and explicit memory layers, each optimized for a different type of knowledge, with query-conditioned retrieval that only injects what's relevant.
+## Why amem?
 
----
+Current LLM memory stores everything as text blobs and injects **all** of it into **every** context window. amem gives your AI a structured brain instead:
 
-## The Numbers
-
-| Metric | Value |
-|---|---|
-| Detail preservation | **100% — no lossy summarization, raw chunks stored verbatim** |
-| Query latency | **44ms avg** at 50 chunks (measured with live Ollama) |
-| Ingest latency | **~300ms** per message (dominated by embedding API call) |
-| Explicit memory latency | **0.03ms** (SQLite WAL, write-through) |
-| Python codebase | **13,900+ lines** across **81 files** |
-| Test suite | **212 unit tests + 6 live-Ollama integration tests + 42 scenario evaluations** |
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        amem                                     │
+│                                                                 │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ ┌────────┐ │
+│  │ Episodic │ │ Semantic │ │Behavioral│ │Working │ │Explicit│ │
+│  │          │ │          │ │          │ │        │ │        │ │
+│  │ "I       │ │ "Alice   │ │ "You     │ │ "We're │ │ "My    │ │
+│  │ remember │ │ leads    │ │ prefer   │ │ debug- │ │ name   │ │
+│  │ that     │ │ the ML   │ │ concise  │ │ ging   │ │ is     │ │
+│  │ convo"   │ │ team"    │ │ answers" │ │ auth"  │ │ Will"  │ │
+│  └──────────┘ └──────────┘ └──────────┘ └────────┘ └────────┘ │
+│                        │                                        │
+│              Query-conditioned retrieval                        │
+│              Only inject what's relevant                        │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Quickstart
 
-### Option 1: With Ollama (recommended)
+### 5 lines to memory
 
-```bash
-# Install Ollama and pull an embedding model
-ollama pull nomic-embed-text
+```python
+from amem.retrieval.orchestrator import MemoryOrchestrator
 
-# Clone and install
-git clone https://github.com/your-org/amem.git
-cd amem
-pip install -e .
+orch = MemoryOrchestrator.from_config(config)  # auto-detects embedding provider
+orch.init_db()                                  # SQLite, crash-safe, zero config
 
-# Start the API server
-python -m cli.main serve
-
-# Open the dashboard
-open http://localhost:8420/dashboard
+await orch.ingest(text="Alice is an ML engineer at Google.", speaker="user")
+ctx = await orch.query("What does Alice do?")
+print(ctx.to_injection_text())
+# → Episodic: "Alice is an ML engineer at Google." (score: 0.87)
+# → Semantic: Alice —[works_at]→ Google (confidence: 0.80)
 ```
 
-### Option 2: With OpenAI
+### Install
 
+```bash
+pip install numpy networkx httpx msgpack fastapi uvicorn click pydantic pyyaml tiktoken
+
+git clone https://github.com/wmlba/amem.git
+cd amem
+```
+
+### Choose your embedding provider
+
+<table>
+<tr><td><strong>Ollama (recommended)</strong></td><td><strong>Completely offline</strong></td></tr>
+<tr>
+<td>
+
+```bash
+ollama pull nomic-embed-text
+```
 ```yaml
 # config.yaml
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+```
+
+</td>
+<td>
+
+```bash
+pip install sentence-transformers
+```
+```yaml
+# config.yaml
+embedding:
+  provider: local
+  model: all-MiniLM-L6-v2
+```
+
+</td>
+</tr>
+<tr><td><strong>OpenAI</strong></td><td><strong>Any OpenAI-compatible server</strong></td></tr>
+<tr>
+<td>
+
+```yaml
 embedding:
   provider: openai
   model: text-embedding-3-small
   api_key: sk-...
 ```
 
-### Option 3: Completely offline
+</td>
+<td>
 
 ```yaml
-# config.yaml — no server needed
+# vLLM, llama.cpp, LiteLLM, Together,
+# Anyscale, OpenRouter, etc.
 embedding:
-  provider: local
-  model: all-MiniLM-L6-v2
+  provider: openai
+  model: your-model
+  base_url: http://localhost:8000/v1
 ```
+
+</td>
+</tr>
+</table>
+
+### Start the server
+
+```bash
+python -m cli.main serve        # API on :8420
+open http://localhost:8420/dashboard  # Admin UI
+```
+
+---
+
+## Use with Local Models
+
+amem runs **100% locally** with zero cloud dependencies. Three options:
+
+### Option A: Ollama (easiest)
+
+```bash
+# Install Ollama (https://ollama.com)
+ollama pull nomic-embed-text        # 274MB, good quality
+
+# Or use a smaller model
+ollama pull all-minilm               # 46MB, fastest
+```
+
+```yaml
+# config.yaml
+embedding:
+  provider: ollama
+  model: nomic-embed-text            # or all-minilm
+```
+
+Works with any model Ollama supports. The same model handles embeddings, entity extraction, deduplication, and entity resolution — no separate LLM needed.
+
+### Option B: sentence-transformers (no server)
 
 ```bash
 pip install sentence-transformers
-python -m cli.main serve
 ```
 
-### Option 4: Any OpenAI-compatible server
+```yaml
+# config.yaml
+embedding:
+  provider: local
+  model: all-MiniLM-L6-v2           # 384 dims, fast
+  # model: all-mpnet-base-v2        # 768 dims, better quality
+  # model: BAAI/bge-small-en-v1.5   # 384 dims, very good
+```
 
-Works with vLLM, llama.cpp, LiteLLM, Together, Anyscale, OpenRouter — anything that speaks `/v1/embeddings`.
+Downloads the model on first use (~80MB), then runs entirely from cache. **No server, no network, no API key.**
+
+### Option C: llama.cpp / vLLM / LiteLLM
+
+Any server that exposes `/v1/embeddings` works:
+
+```bash
+# Example: llama.cpp with an embedding model
+./llama-server -m nomic-embed-text-v1.5.Q8_0.gguf --port 8000 --embedding
+```
 
 ```yaml
 embedding:
   provider: openai
-  model: your-model-name
+  model: nomic-embed-text
   base_url: http://localhost:8000/v1
 ```
 
----
+### Option D: Auto-detect
 
-## Why This Exists
-
-Current LLM memory systems have six fundamental problems:
-
-| Problem | Current Systems | amem |
-|---|---|---|
-| **Context Waste** | Inject ALL memories into EVERY query | Query-conditioned — only relevant chunks |
-| **Lossy Compression** | Summarize "learning rate 3e-4" → "trains ML models" | Raw chunks preserved verbatim |
-| **Staleness** | Nightly batch updates | Write-through in < 50ms |
-| **No Temporal Reasoning** | "Works at OCI" and "works at Anthropic" coexist | Contradiction detection + temporal resolution |
-| **No Structure** | Flat text blob | 5 queryable layers + knowledge graph |
-| **No Learning** | Same results every time | Relevance feedback — improves with use |
+```yaml
+embedding:
+  provider: auto    # tries Ollama → local sentence-transformers → OPENAI_API_KEY env
+```
 
 ---
 
-## Architecture
-
-```
-                         ┌─────────────┐
-                         │   Query     │
-                         └──────┬──────┘
-                                │
-                    ┌───────────┼───────────┐
-                    │    Intent Analysis     │  ← Novel: dynamic scoring weights
-                    └───────────┬───────────┘
-                                │
-          ┌─────────────────────┼─────────────────────┐
-          │                     │                       │
-    ┌─────┴─────┐       ┌──────┴──────┐       ┌───────┴───────┐
-    │ Episodic  │       │  Semantic   │       │   Explicit    │
-    │  Store    │       │   Graph     │       │    Store      │
-    │           │       │             │       │               │
-    │ TAI Index │       │  NetworkX   │       │  Key-Value    │
-    │ (vectors) │       │  (entities) │       │  (user CRUD)  │
-    └─────┬─────┘       └──────┬──────┘       └───────┬───────┘
-          │                     │                       │
-          │              ┌──────┴──────┐                │
-          │              │ Behavioral  │                │
-          │              │  Profile    │                │
-          │              └──────┬──────┘                │
-          │                     │                       │
-          └─────────────────────┼───────────────────────┘
-                                │
-                    ┌───────────┼───────────┐
-                    │  Budget Allocation    │  ← Dynamic per-layer token budget
-                    └───────────┬───────────┘
-                                │
-                    ┌───────────┼───────────┐
-                    │  Context Assembly     │  ← Behavioral modulation
-                    └───────────┬───────────┘
-                                │
-                         ┌──────┴──────┐
-                         │  Injection  │  → 245 tokens instead of 3000
-                         └─────────────┘
-```
+## How It Works
 
 ### The Five Memory Layers
 
-| Layer | Analogy | What It Stores | How It Works |
-|---|---|---|---|
-| **Episodic** | "I remember that conversation" | Raw text chunks with embeddings | Temporal Associative Index — fused vectorized search with time-tiered shards |
-| **Semantic** | "I know Alice leads the ML team" | Entities, relations, confidence scores | NetworkX knowledge graph with entity resolution and contradiction detection |
-| **Behavioral** | "You prefer concise technical answers" | Communication preferences | 4-dimension EMA profile built from message signals |
-| **Working** | "We're debugging the auth flow right now" | Session goals, established facts, open threads | In-session scratchpad, flushed to episodic on session end |
-| **Explicit** | "You told me your name is Will" | User-controlled facts, preferences, instructions | Typed key-value store with priority, never decays, always injected |
-
----
-
-## Features
-
-### Temporal Associative Index (TAI)
-
-A novel vector index designed for memory, not generic similarity search.
-
-- **Time-tiered shards**: Hot (brute-force, sub-ms) → Warm → Cold (archival)
-- **Fused scoring**: `similarity × temporal × reinforcement × importance` in a single numpy expression — zero Python loops
-- **O(n) top-k** via `argpartition` instead of O(n log n) full sort
-- **Batch dedup + novelty** in one matmul — not N separate searches
-- **Smart dedup**: Checks distinctive tokens, not just cosine. "Working on Kubernetes" and "Working on React" aren't duplicates even if cosine > 0.95
-- **Auto-compaction**: Hot → warm when threshold exceeded, cold chunks auto-evicted
-
-### Entity Resolution
-
-- Fuzzy string matching (typos: "Kuberntes" → "Kubernetes")
-- Alias tracking ("k8s", "kube" → "Kubernetes")
-- Possessive normalization ("Will's GB10" → "GB10")
-- Acronym expansion ("ML" → "Machine Learning")
-- Vector-based linking (embedding similarity for semantic matches)
-- Entity merging with relation consolidation
-
-### Contradiction Detection
-
-- Direct conflicts: "works at OCI" vs "works at Anthropic" → `newer_wins`
-- Temporal supersession: predicate-aware temporal reasoning
-- Negation detection: "left OCI" negates "works at OCI"
-- Confidence-based resolution when timestamps are tied
-- Fact retraction: user-driven corrections
-
-### Intent-Aware Dynamic Scoring
-
-Queries are analyzed for intent before scoring:
-- "What's my **current** status?" → boosts temporal weight
-- "What's the **exact** config?" → boosts similarity weight
-- "Tell me **everything** about X" → flattens all weights
-- "Team **Beta** issue" → boosts context-anchor matching
-
-### Relevance Feedback Loop
-
-The system learns which retrievals are actually useful:
-- Compares LLM response tokens against retrieved chunk tokens
-- Used chunks get reinforced (access_count++)
-- Ignored chunks get gently demoted (confidence × 0.95)
-- Over hundreds of queries, retrieval quality improves automatically
-
-### Memory Consolidation
-
-Inspired by human memory consolidation during sleep:
-- Frequently-mentioned entities promoted to semantic graph
-- Low-confidence old chunks evicted from cold tier
-- Topic clusters detected from co-retrieval patterns
-
-### Adaptive Decay
-
-Not all facts should decay at the same rate:
-
-| Tier | Example | Decay Rate |
+| Layer | What it stores | How it works |
 |---|---|---|
-| Identity | "My name is Will" | 0.001/day |
-| Professional | "I work at Anthropic" | 0.005/day |
-| Project | "Using PyTorch for training" | 0.01/day |
-| Ephemeral | "I prefer dark mode" | 0.05/day |
+| **Episodic** | Raw conversation chunks | Temporal Associative Index — fused vectorized scoring across time-tiered shards (hot/warm/cold) |
+| **Semantic** | Entities and relationships | Knowledge graph with entity resolution, contradiction detection, adaptive decay |
+| **Behavioral** | How to interact with this user | 4-dimension EMA profile (depth, formality, expertise, verbosity) |
+| **Working** | Current session context | Goals, established facts, open threads — flushed to episodic on session end |
+| **Explicit** | User-controlled facts | Typed key-value store with priority — never decays, always injected |
+
+### What makes this different from Mem0 / Zep / Letta
+
+| Capability | Mem0 | Zep | Letta | amem |
+|---|---|---|---|---|
+| Memory layers | 3 scopes | 1 (graph) | 3 tiers | **5 layers** |
+| Extraction method | LLM call | LLM call | LLM call | **Embedding only (no LLM)** |
+| Temporal decay | LRU only | Not impl. | No | **4 adaptive tiers** |
+| Intent-aware scoring | No | No | No | **Yes** |
+| Relevance feedback | No | No | No | **Yes** |
+| Behavioral profiling | No | No | Partial | **Yes** |
+| Works offline | No | No | No | **Yes** |
+| Zero config | No | Neo4j req. | No | **SQLite, auto-detect** |
 
 ---
 
-## API Reference
+## Integrations
 
-### REST API (26 endpoints)
-
-```bash
-# Ingest text
-curl -X POST http://localhost:8420/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Alice works on ML pipelines using Python.", "speaker": "user"}'
-
-# Query memory
-curl -X POST http://localhost:8420/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What does Alice work on?", "top_k": 5}'
-
-# Remember something explicitly
-curl -X POST http://localhost:8420/explicit \
-  -H "Content-Type: application/json" \
-  -d '{"key": "name", "value": "Will", "entry_type": "fact", "priority": 10}'
-
-# Query the knowledge graph
-curl -X POST http://localhost:8420/graph/query \
-  -H "Content-Type: application/json" \
-  -d '{"entities": ["Alice"], "max_depth": 2}'
-
-# Merge entities
-curl -X POST http://localhost:8420/graph/merge \
-  -H "Content-Type: application/json" \
-  -d '{"name_a": "GB10", "name_b": "Blackwell workstation"}'
-
-# View dashboard
-open http://localhost:8420/dashboard
-```
-
-### CLI (15 commands)
-
-```bash
-amem ingest "Alice works on ML pipelines."
-amem query "What does Alice work on?"
-amem remember name Will --type fact --priority 10
-amem forget name
-amem memories
-amem graph Alice --depth 2
-amem merge GB10 "Blackwell workstation"
-amem alias Kubernetes k8s
-amem retract Will works_at OCI
-amem contradictions
-amem profile
-amem feedback response_depth 0.9
-amem decay
-amem status
-amem serve --port 8420
-```
-
-### MCP Server (9 tools)
-
-Add to Claude Desktop's `claude_desktop_config.json`:
+### MCP Server — Claude Desktop, Cursor, OpenClaw
 
 ```json
 {
@@ -299,225 +251,208 @@ Add to Claude Desktop's `claude_desktop_config.json`:
 }
 ```
 
-Tools: `memory_ingest`, `memory_query`, `memory_remember`, `memory_forget`, `memory_list`, `memory_graph`, `memory_retract`, `memory_merge_entities`, `memory_stats`
+9 tools: `memory_ingest`, `memory_query`, `memory_remember`, `memory_forget`, `memory_list`, `memory_graph`, `memory_retract`, `memory_merge_entities`, `memory_stats`
 
-### OpenAI-Compatible Proxy
-
-Drop-in replacement — just change the base URL:
+### OpenAI-Compatible Proxy — Drop-in memory for any app
 
 ```bash
-# Start the proxy
 python -m api.openai_compat --target https://api.openai.com/v1 --port 8421
-
-# Use with any OpenAI client — memory is injected automatically
-export OPENAI_BASE_URL=http://localhost:8421/v1
 ```
 
-Every `/v1/chat/completions` request gets memory context injected before forwarding, and the conversation is ingested into memory after the response.
+```python
+# Existing code — just change the base URL
+client = OpenAI(base_url="http://localhost:8421/v1")
+# Memory is injected automatically into every request
+```
+
+### REST API — 26 endpoints
+
+```bash
+curl -X POST http://localhost:8420/ingest \
+  -d '{"text": "Alice works on ML pipelines.", "speaker": "user"}'
+
+curl -X POST http://localhost:8420/query \
+  -d '{"query": "What does Alice work on?"}'
+```
+
+### CLI — 15 commands
+
+```bash
+amem ingest "Alice works on ML pipelines."
+amem query "What does Alice work on?"
+amem remember name Will --type fact --priority 10
+amem graph Alice
+amem serve
+```
+
+### Admin Dashboard
+
+```
+http://localhost:8420/dashboard
+```
+
+Live web UI with: system stats, knowledge graph visualization (force-directed, interactive), memory timeline, query explorer with budget allocation breakdown, behavioral profile bars.
 
 ---
 
-## Embedding Providers
+## Key Features
 
-One config field. Any model. Same model powers all five uses.
+<details>
+<summary><strong>Temporal Associative Index (TAI)</strong> — novel vector index for memory</summary>
 
-| Provider | Config | Use Case |
-|---|---|---|
-| **Ollama** | `provider: ollama` | Local development, free |
-| **OpenAI** | `provider: openai` | Highest quality embeddings |
-| **Anthropic/Voyage** | `provider: anthropic` | Claude ecosystem |
-| **Local** | `provider: local` | Completely offline, no server |
-| **Any OpenAI-compat** | `provider: openai, base_url: ...` | vLLM, llama.cpp, LiteLLM, Together, etc. |
-| **Auto** | `provider: auto` | Tries Ollama → local → OpenAI env key |
+Not HNSW. Not FAISS. A purpose-built index where time is structural:
+
+- **Time-tiered shards**: Hot (brute-force, sub-ms) → Warm → Cold (archival)
+- **Fused scoring**: `similarity × temporal × reinforcement × importance` in one numpy pass
+- **O(n) top-k** via argpartition
+- **Batch dedup + novelty** in one matmul
+- **Smart dedup**: Checks distinctive tokens, not just cosine
+- **Auto-compaction**: Hot → warm, cold eviction
+</details>
+
+<details>
+<summary><strong>Entity Resolution</strong> — "k8s" = "Kubernetes" = "kube"</summary>
+
+- Fuzzy matching (typos: "Kuberntes" → "Kubernetes")
+- Alias tracking, possessive removal, acronym expansion
+- Vector similarity for semantic matches
+- Entity merging with relation consolidation
+</details>
+
+<details>
+<summary><strong>Contradiction Detection</strong> — "left OCI" supersedes "works at OCI"</summary>
+
+- Direct conflicts detected on exclusive predicates
+- Temporal resolution: newer facts win
+- Negation detection: "left X" negates "works at X"
+- Fact retraction: user-driven corrections
+</details>
+
+<details>
+<summary><strong>Intent-Aware Scoring</strong> — query analysis adjusts weights</summary>
+
+- "What's my **current** status?" → boosts temporal weight
+- "What's the **exact** config?" → boosts similarity weight
+- "Tell me **everything**" → flattens all weights
+- "**Team Beta** issue" → boosts context-anchor matching
+</details>
+
+<details>
+<summary><strong>Relevance Feedback</strong> — retrieval improves with use</summary>
+
+- Compares LLM response against retrieved chunks
+- Used chunks reinforced, ignored chunks demoted
+- Retrieval quality improves automatically over time
+</details>
+
+<details>
+<summary><strong>Memory Consolidation</strong> — like human sleep</summary>
+
+- Frequent entities promoted to semantic graph
+- Low-confidence old chunks evicted
+- Topic clusters detected from co-retrieval
+</details>
 
 ---
 
 ## Benchmarks
 
-Tested against live Ollama with `nomic-embed-text` (768 dimensions):
-
-### Semantic Retrieval Accuracy
-
-| Scenario | Test | Result |
-|---|---|---|
-| 4 distinct topics (ML, kitchen, finance, yoga) | Correct topic ranked #1 | **4/4 pass** |
-| Person-specific queries (Alice vs Bob) | Correct person ranked #1 | **pass** |
-| Detail preservation (learning rate, batch size, GPU) | Exact values retrievable | **4/4 pass** |
-
-### Real-Life Scenario Evaluations (42 tests, 11 scenarios)
-
-| Scenario | Tests | Result |
-|---|---|---|
-| Software engineer — 2-week daily workflow | 5/5 | Pass |
-| Researcher — evolving hypotheses over 3 months | 3/3 | Pass |
-| Manager — 3-team context switching | 4/4 | Pass |
-| Career change — job/location/title contradictions | 6/6 | Pass |
-| Learning journey — beginner to advanced profile shift | 2/2 | Pass |
-| Multi-session continuity — survives restart | 3/3 | Pass |
-| Relevance feedback — retrieval quality improves | 2/2 | Pass |
-| Entity resolution — k8s/Kubernetes, Postgres/PG | 5/5 | Pass |
-| Memory consolidation — pattern promotion | 2/2 | Pass |
-| Working memory — session tracking + flush | 5/5 | Pass |
-| Performance at scale — 100+ chunks | 5/5 | Pass |
+Measured with live Ollama `nomic-embed-text` (768 dimensions).
 
 ### Performance
 
-| Operation | Latency |
+| Operation | Measured |
 |---|---|
-| Ingest (embed + store + extract) | < 2s per message |
-| Query (retrieve + rank + assemble) | < 1s |
-| Explicit memory set/get | < 1ms |
-| SQLite persistence | Write-through, crash-safe |
-| Database size | ~116 KB for 11 chunks |
+| Query (retrieve + rank + assemble) | **44ms avg** at 50 chunks |
+| Ingest (embed + store + extract) | **~300ms** per message |
+| Explicit memory set/get | **0.03ms** |
 
----
+### Scenario Evaluations (42 tests, 11 real-life scenarios)
 
-## Persistence
+| Scenario | Result |
+|---|---|
+| Software engineer — 2-week daily workflow | 5/5 |
+| Researcher — evolving hypotheses over 3 months | 3/3 |
+| Manager — 3-team context switching | 4/4 |
+| Career change — job/location/title contradictions | 6/6 |
+| Learning journey — beginner→advanced profile shift | 2/2 |
+| Multi-session continuity — survives restart | 3/3 |
+| Relevance feedback — retrieval quality improves | 2/2 |
+| Entity resolution — k8s/Kubernetes, Postgres/PG | 5/5 |
+| Memory consolidation — pattern promotion | 2/2 |
+| Working memory — session tracking + flush | 5/5 |
+| Performance at scale — 100+ chunks | 5/5 |
 
-SQLite with WAL mode. Crash-safe, concurrent reads, incremental writes.
+### Detail Preservation
 
-```
-data/
-├── amem.db           ← Single SQLite database (all 5 layers)
-├── semantic/
-│   ├── resolver.json  ← Entity resolver state
-│   └── contradictions.json
-└── episodic/
-    └── tai/           ← Temporal Associative Index shards
-```
+| Detail | Stored | Retrieved |
+|---|---|---|
+| Learning rate `3e-4` | ✅ | ✅ |
+| Batch size `256` | ✅ | ✅ |
+| GPU model `A100 80GB` | ✅ | ✅ |
+| Precision `BF16` | ✅ | ✅ |
 
-Full GDPR compliance: `DELETE /user/{user_id}` wipes all data for a user.
+Current systems summarize these away. amem preserves them verbatim.
 
 ---
 
 ## Production Features
 
-- **Authentication**: API key auth via `X-API-Key` header or `AMEM_API_KEYS` env var
-- **Rate Limiting**: Token bucket algorithm per API key / IP
-- **Structured Logging**: JSON-formatted logs with request IDs
-- **Prometheus Metrics**: `/metrics` endpoint for monitoring
-- **Schema Migrations**: Forward-only SQL migrations on startup
-- **Multi-User Isolation**: `user_id` scoping on every table
-- **Backup**: `VACUUM INTO` for safe SQLite snapshots
-- **Admin Dashboard**: Live web UI at `/dashboard`
+| Feature | Details |
+|---|---|
+| **Persistence** | SQLite WAL — crash-safe, concurrent reads, incremental writes |
+| **Authentication** | API key auth via `X-API-Key` or `AMEM_API_KEYS` env var |
+| **Rate Limiting** | Token bucket per API key / IP |
+| **Multi-User** | `user_id` scoping on every table, GDPR delete |
+| **Observability** | JSON structured logging, Prometheus `/metrics`, request IDs |
+| **Migrations** | Forward-only SQL schema versioning |
+| **Backup** | `VACUUM INTO` for safe SQLite snapshots |
 
 ---
 
 ## Project Structure
 
 ```
-associative_memory/
-├── amem/                          # Core library
-│   ├── episodic/                  # Layer 1: Temporal Associative Index
-│   │   ├── temporal_index.py      # Novel TAI with time-tiered shards
-│   │   ├── vector_index.py        # Legacy index (backward compat)
-│   │   ├── store.py               # Ingest pipeline with smart dedup
-│   │   ├── importance.py          # Chunk importance scoring
-│   │   ├── smart_dedup.py         # Distinctive-token deduplication
-│   │   └── chunker.py             # Sentence-boundary chunking
-│   ├── semantic/                  # Layer 2: Knowledge Graph
-│   │   ├── graph.py               # NetworkX graph with entity resolution
-│   │   ├── resolver.py            # Fuzzy/alias/vector entity linking
-│   │   ├── contradictions.py      # Temporal contradiction detection
-│   │   ├── embedding_extractor.py # Entity extraction via same embedding model
-│   │   ├── adaptive_decay.py      # 4-tier decay rates
-│   │   └── temporal.py            # Temporal expression parsing
-│   ├── behavioral/                # Layer 3: User Profile
-│   │   └── profile.py             # 4-dimension EMA behavioral tracking
-│   ├── working/                   # Layer 4: Session Scratchpad
-│   │   └── session.py             # Goals, facts, threads
-│   ├── explicit/                  # Layer 5: User-Controlled Memory
-│   │   └── store.py               # Typed CRUD with priority
-│   ├── retrieval/                 # Query Pipeline
-│   │   ├── orchestrator.py        # Cross-layer retrieval + budget allocation
-│   │   └── intent.py              # Intent-aware dynamic scoring
-│   ├── embeddings/                # Provider Abstraction
-│   │   ├── factory.py             # Universal provider factory
-│   │   ├── ollama.py              # Ollama (with circuit breaker)
-│   │   ├── openai_embed.py        # OpenAI-compatible endpoints
-│   │   ├── anthropic_embed.py     # Voyage models
-│   │   └── local_embed.py         # sentence-transformers (offline)
-│   ├── feedback/                  # Learning Loop
-│   │   └── relevance.py           # Reinforcement from LLM usage
-│   ├── maintenance/               # Background Jobs
-│   │   └── consolidation.py       # Memory consolidation engine
-│   ├── persistence/               # Storage
-│   │   ├── sqlite.py              # SQLite WAL backend
-│   │   └── migrations.py          # Schema versioning
-│   └── utils/                     # Utilities
-│       ├── tokenizer.py           # tiktoken integration
-│       ├── auth.py                # API key authentication
-│       ├── logging.py             # Structured JSON logging + metrics
-│       └── ratelimit.py           # Token bucket rate limiter
-├── api/                           # REST API
-│   ├── app.py                     # FastAPI (26 endpoints)
-│   ├── openai_compat.py           # OpenAI-compatible proxy
-│   └── models.py                  # Pydantic schemas
-├── mcp/                           # MCP Server
-│   └── server.py                  # 9 tools over stdio JSON-RPC
-├── cli/                           # CLI
-│   └── main.py                    # 15 Click commands
-├── dashboard/                     # Admin UI
-│   └── index.html                 # Single-file web dashboard
-├── tests/                         # Test Suite
-│   ├── test_tai.py                # Temporal Associative Index
-│   ├── test_vector_index.py       # Legacy vector index
-│   ├── test_resolver.py           # Entity resolution
-│   ├── test_contradictions.py     # Contradiction detection
-│   ├── test_budget.py             # Dynamic budget allocation
-│   ├── test_feedback_and_consolidation.py
-│   ├── test_sqlite.py             # Persistence
-│   ├── test_providers.py          # Embedding providers
-│   ├── test_mcp_and_proxy.py      # MCP + OpenAI proxy
-│   ├── test_integration.py        # End-to-end with mock embeddings
-│   └── test_integration_real.py   # End-to-end with live Ollama
-├── config.yaml                    # Configuration
-└── pyproject.toml                 # Dependencies
+amem/
+├── amem/
+│   ├── episodic/          # Layer 1: TAI vector index, chunking, dedup, importance
+│   ├── semantic/          # Layer 2: Knowledge graph, entity resolution, contradictions
+│   ├── behavioral/        # Layer 3: 4-dimension user profile
+│   ├── working/           # Layer 4: Session scratchpad
+│   ├── explicit/          # Layer 5: User-controlled key-value store
+│   ├── retrieval/         # Query pipeline: orchestrator, intent analysis
+│   ├── embeddings/        # Provider factory: Ollama, OpenAI, local, Anthropic
+│   ├── feedback/          # Relevance feedback loop
+│   ├── maintenance/       # Memory consolidation engine
+│   ├── persistence/       # SQLite WAL backend + migrations
+│   └── utils/             # Auth, logging, metrics, tokenizer, rate limiter
+├── api/                   # FastAPI (26 endpoints) + OpenAI proxy
+├── mcp/                   # MCP server (9 tools, stdio JSON-RPC)
+├── cli/                   # Click CLI (15 commands)
+├── dashboard/             # Admin web UI (single HTML file)
+└── tests/                 # 212 unit tests + 6 integration + 42 scenario evals
 ```
-
----
-
-## What Makes This Different
-
-This isn't another RAG framework. It's a fundamentally different approach to LLM memory.
-
-**Existing systems** (ChatGPT Memory, Claude Memory, LangChain, LlamaIndex):
-- Summarize conversations into text blobs
-- Inject everything into every context window
-- No temporal reasoning — old and new facts coexist with equal weight
-- No learning — retrieval quality never improves
-- Vendor-locked, cloud-only
-
-**This system**:
-- Five specialized memory layers modeled after human cognition
-- Query-conditioned retrieval — only relevant context injected
-- Temporal Associative Index with time-tiered shards and fused scoring
-- Contradiction detection with automatic resolution
-- Relevance feedback loop — the system learns what's useful
-- Memory consolidation — patterns crystallize into knowledge
-- Runs locally, works with any embedding model, your data stays yours
 
 ---
 
 ## Contributing
 
-Contributions welcome. The areas with highest impact:
+Contributions welcome. Highest impact areas:
 
-1. **Better embedding models** — test with different models and report quality
-2. **New extraction patterns** — improve the embedding-based entity extractor
-3. **Storage backends** — PostgreSQL + pgvector, DuckDB
-4. **Benchmarks** — compare against blob-injection baselines on standard datasets
-5. **Language support** — test and improve extraction for non-English text
+- **Embedding models** — test with different models, report retrieval quality
+- **Storage backends** — PostgreSQL + pgvector, DuckDB
+- **Integrations** — LangChain, LlamaIndex, OpenClaw plugins
+- **Benchmarks** — compare against Mem0/Zep on LoCoMo, LongMemEval
+- **Language support** — improve extraction for non-English text
 
 ---
 
 ## License
 
-MIT
-
----
+[MIT](LICENSE)
 
 <p align="center">
-  <strong>Memory infrastructure for AI that actually works.</strong><br/>
-  <em>Five layers. Query-conditioned. Self-improving. Runs locally.</em>
+  <br/>
+  <strong>amem</strong> — The five-layer brain for AI agents.<br/>
+  <sub>Query-conditioned · Self-improving · Runs locally · Your data stays yours.</sub>
 </p>

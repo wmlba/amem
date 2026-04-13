@@ -52,7 +52,9 @@
       "Bash(/opt/homebrew/bin/gh auth:*)",
       "Bash(/opt/homebrew/bin/gh repo:*)",
       "Bash(git commit -m 'Fix README numbers: replace unverified claims with measured values:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git commit -m 'Redesign README: competitor-grade layout, local model guide, verified numbers:*)"
     ]
   }
 }
