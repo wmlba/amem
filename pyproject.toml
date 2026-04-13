@@ -1,7 +1,7 @@
 [project]
-name = "associative-memory"
+name = "amem"
 version = "0.1.0"
-description = "Multi-layer associative memory system with query-conditioned retrieval"
+description = "amem — Five-layer associative memory for AI agents. Query-conditioned retrieval, temporal reasoning, self-improving."
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.24",

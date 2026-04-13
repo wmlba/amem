@@ -47,7 +47,7 @@ class TestMCPServer:
         assert resp["id"] == 1
         assert "result" in resp
         assert resp["result"]["protocolVersion"] == "2024-11-05"
-        assert resp["result"]["serverInfo"]["name"] == "associative-memory"
+        assert resp["result"]["serverInfo"]["name"] == "amem"
 
     @pytest.mark.asyncio
     async def test_handle_tools_list(self, server):

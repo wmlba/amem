@@ -45,7 +45,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         global _orchestrator
-        logger.info("Starting associative memory server")
+        logger.info("Starting amem server")
         embedder = create_embedder(config.embedding if config.embedding.provider != "auto" else config.ollama)
         _orchestrator = MemoryOrchestrator(embedder, config)
         _orchestrator.init_db()
@@ -59,10 +59,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
             await embedder.close()
 
     app = FastAPI(
-        title="Associative Memory API",
+        title="amem API",
         version="0.3.0",
-        description="Multi-layer associative memory with entity resolution, "
-                    "contradiction detection, and behavioral adaptation",
+        description="Five-layer associative memory for AI agents",
         lifespan=lifespan,
     )
 

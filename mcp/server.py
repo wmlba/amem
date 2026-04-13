@@ -23,7 +23,7 @@ from amem.embeddings.ollama import OllamaEmbedding
 from amem.retrieval.orchestrator import MemoryOrchestrator
 
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_NAME = "associative-memory"
+SERVER_NAME = "amem"
 SERVER_VERSION = "0.2.0"
 
 # ─── Tool Definitions ───────────────────────────────────────────────
@@ -378,7 +378,7 @@ class MCPServer:
 
 async def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Associative Memory MCP Server")
+    parser = argparse.ArgumentParser(description="amem MCP Server")
     parser.add_argument("--config", "-c", default=None, help="Path to config.yaml")
     parser.add_argument("--db", default=None, help="Path to amem.db")
     args = parser.parse_args()

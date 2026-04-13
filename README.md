@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">Associative Memory</h1>
+  <h1 align="center">amem</h1>
   <p align="center">
     <strong>Memory infrastructure for AI that actually works.</strong>
   </p>
@@ -47,8 +47,8 @@
 ollama pull nomic-embed-text
 
 # Clone and install
-git clone https://github.com/your-org/associative-memory.git
-cd associative-memory
+git clone https://github.com/your-org/amem.git
+cd amem
 pip install -e .
 
 # Start the API server
@@ -99,7 +99,7 @@ embedding:
 
 Current LLM memory systems have six fundamental problems:
 
-| Problem | Current Systems | Associative Memory |
+| Problem | Current Systems | amem |
 |---|---|---|
 | **Context Waste** | Inject ALL memories into EVERY query | Query-conditioned — only relevant chunks |
 | **Lossy Compression** | Summarize "learning rate 3e-4" → "trains ML models" | Raw chunks preserved verbatim |
@@ -290,10 +290,10 @@ Add to Claude Desktop's `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "associative-memory": {
+    "amem": {
       "command": "python3",
       "args": ["-m", "mcp.server"],
-      "cwd": "/path/to/associative-memory"
+      "cwd": "/path/to/amem"
     }
   }
 }

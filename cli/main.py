@@ -31,7 +31,7 @@ def _run(coro):
 @click.option("--config", "-c", default=None, help="Path to config.yaml")
 @click.pass_context
 def cli(ctx, config):
-    """amem — Multi-layer Associative Memory System"""
+    """amem — Five-layer associative memory for AI agents"""
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config
 

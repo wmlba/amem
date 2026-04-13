@@ -55,7 +55,7 @@ def create_proxy_app(
         await embedder.close()
 
     app = FastAPI(
-        title="Associative Memory OpenAI Proxy",
+        title="amem OpenAI Proxy",
         version="0.1.0",
         lifespan=lifespan,
     )
@@ -91,7 +91,7 @@ def create_proxy_app(
             memory_system_msg = {
                 "role": "system",
                 "content": (
-                    f"[Associative Memory Context]\n"
+                    f"[amem Memory Context]\n"
                     f"The following is retrieved from the user's memory. "
                     f"Use it to personalize your response.\n\n"
                     f"{memory_context}"
@@ -218,7 +218,7 @@ if __name__ == "__main__":
     import argparse
     import uvicorn
 
-    parser = argparse.ArgumentParser(description="OpenAI-compatible Memory Proxy")
+    parser = argparse.ArgumentParser(description="amem OpenAI-compatible Proxy")
     parser.add_argument("--target", default="https://api.openai.com/v1", help="Target LLM API base URL")
     parser.add_argument("--port", type=int, default=8421, help="Proxy port")
     parser.add_argument("--config", default=None, help="Path to config.yaml")

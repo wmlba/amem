@@ -3,221 +3,479 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Associative Memory Dashboard</title>
+<title>amem Dashboard</title>
 <style>
-  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9; --accent: #58a6ff; --green: #3fb950; --red: #f85149; --yellow: #d29922; }
+  :root { --bg: #0a0e14; --card: #12171f; --card2: #161d27; --border: #1e2a3a; --text: #c9d1d9; --dim: #6e7a8a; --accent: #58a6ff; --accent2: #388bfd; --green: #3fb950; --red: #f85149; --yellow: #d29922; --purple: #bc8cff; --pink: #f778ba; --orange: #f0883e; --cyan: #39d2c0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
-  .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
-  .header h1 { font-size: 20px; font-weight: 600; }
-  .header .tag { background: var(--accent); color: #000; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 24px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
-  .card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; margin-bottom: 12px; }
-  .stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
-  .stat:last-child { border: none; }
-  .stat .label { color: #8b949e; }
-  .stat .value { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .fact { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
-  .fact .predicate { color: var(--accent); }
-  .fact .confidence { color: #8b949e; font-size: 12px; }
-  .memory-entry { padding: 8px 0; border-bottom: 1px solid var(--border); }
-  .memory-entry .key { color: var(--accent); font-weight: 600; }
-  .memory-entry .type-badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--border); }
-  .profile-bar { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
-  .profile-bar .bar-bg { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
-  .profile-bar .bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.3s; }
-  .profile-bar .dim-name { width: 140px; font-size: 13px; color: #8b949e; }
-  .profile-bar .dim-value { width: 50px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
-  #graph-container { width: 100%; height: 400px; position: relative; }
-  canvas { width: 100%; height: 100%; }
-  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-  .status-dot.ok { background: var(--green); }
-  .status-dot.warn { background: var(--yellow); }
-  .status-dot.err { background: var(--red); }
-  .refresh-btn { background: var(--border); color: var(--text); border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-  .refresh-btn:hover { background: #484f58; }
-  .search-box { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; width: 100%; margin-bottom: 12px; }
-  .empty { color: #484f58; font-style: italic; padding: 12px 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+
+  /* Header */
+  .header { background: linear-gradient(135deg, #12171f 0%, #161d27 100%); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px); }
+  .header h1 { font-size: 18px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header .tag { background: var(--accent); color: #000; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 6px currentColor; }
+  .status-dot.ok { background: var(--green); color: var(--green); }
+  .status-dot.err { background: var(--red); color: var(--red); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; padding: 0 24px; background: var(--card); border-bottom: 1px solid var(--border); }
+  .tab { padding: 12px 20px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--dim); border-bottom: 2px solid transparent; transition: all .2s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Cards & Layout */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; padding: 20px 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: border-color .2s; }
+  .card:hover { border-color: #2a3a4e; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .icon { font-size: 16px; }
   .full-width { grid-column: 1 / -1; }
+
+  /* Stats */
+  .stat { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+  .stat:last-child { border: none; }
+  .stat .label { color: var(--dim); font-size: 13px; }
+  .stat .value { font-weight: 600; font-variant-numeric: tabular-nums; font-size: 14px; }
+
+  /* Buttons & Inputs */
+  .btn { background: var(--accent2); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .15s; }
+  .btn:hover { background: var(--accent); transform: translateY(-1px); }
+  .btn-ghost { background: rgba(88,166,255,.1); color: var(--accent); }
+  .btn-ghost:hover { background: rgba(88,166,255,.2); }
+  .search-box { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; width: 100%; margin-bottom: 12px; font-size: 13px; transition: border-color .2s; }
+  .search-box:focus { outline: none; border-color: var(--accent); }
+
+  /* Profile bars */
+  .profile-bar { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+  .profile-bar .dim-name { width: 150px; font-size: 13px; color: var(--dim); }
+  .profile-bar .bar-bg { flex: 1; height: 6px; background: rgba(255,255,255,.06); border-radius: 3px; overflow: hidden; }
+  .profile-bar .bar-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+  .profile-bar .dim-value { width: 45px; text-align: right; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Facts and entries */
+  .fact-row { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .fact-row:last-child { border: none; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .badge-fact { background: rgba(63,185,80,.15); color: var(--green); }
+  .badge-pref { background: rgba(188,140,255,.15); color: var(--purple); }
+  .badge-inst { background: rgba(247,120,186,.15); color: var(--pink); }
+  .badge-active { background: rgba(63,185,80,.15); color: var(--green); }
+  .badge-superseded { background: rgba(248,81,73,.15); color: var(--red); }
+  .entity-name { color: var(--accent); font-weight: 600; }
+  .predicate { color: var(--purple); font-weight: 500; }
+  .conf { color: var(--dim); font-size: 12px; }
+  .empty { color: #3a4450; font-style: italic; padding: 16px 0; }
+
+  /* Graph Canvas */
+  #graph-canvas { width: 100%; height: 600px; background: var(--bg); border-radius: 8px; cursor: grab; position: relative; }
+  #graph-canvas:active { cursor: grabbing; }
+  #graph-canvas canvas { border-radius: 8px; }
+  .graph-controls { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+  .graph-legend { display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* Memory Timeline */
+  .timeline { position: relative; padding-left: 24px; }
+  .timeline::before { content: ''; position: absolute; left: 7px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+  .timeline-item { position: relative; padding: 12px 0; }
+  .timeline-item::before { content: ''; position: absolute; left: -20px; top: 18px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); }
+  .timeline-item .time { font-size: 11px; color: var(--dim); }
+  .timeline-item .content { font-size: 13px; margin-top: 4px; }
+  .timeline-item .meta { font-size: 11px; color: var(--dim); margin-top: 4px; display: flex; gap: 12px; }
+  .timeline-item .speaker-user::before { content: '👤 '; }
+  .timeline-item .speaker-assistant::before { content: '🤖 '; }
+  .timeline-item .speaker-system::before { content: '⚙️ '; }
+
+  /* Query result */
+  .query-result-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 12px; max-height: 400px; overflow: auto; font-size: 13px; white-space: pre-wrap; line-height: 1.6; }
 </style>
 </head>
 <body>
+
 <div class="header">
-  <h1>Associative Memory</h1>
+  <h1>amem</h1>
   <span class="tag">DASHBOARD</span>
   <div style="flex:1"></div>
-  <span id="status"><span class="status-dot"></span>Loading...</span>
-  <button class="refresh-btn" onclick="refresh()">Refresh</button>
+  <span id="status"><span class="status-dot"></span>Connecting...</span>
+  <button class="btn btn-ghost" onclick="refreshAll()">⟳ Refresh</button>
 </div>
 
-<div class="grid">
-  <!-- Stats -->
-  <div class="card">
-    <h2>System Stats</h2>
-    <div id="stats-content"><div class="empty">Loading...</div></div>
-  </div>
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('overview')">Overview</div>
+  <div class="tab" onclick="switchTab('graph')">Knowledge Graph</div>
+  <div class="tab" onclick="switchTab('memory')">Memory Timeline</div>
+  <div class="tab" onclick="switchTab('query')">Query Explorer</div>
+</div>
 
-  <!-- Behavioral Profile -->
-  <div class="card">
-    <h2>Behavioral Profile</h2>
-    <div id="profile-content"><div class="empty">Loading...</div></div>
+<!-- ═══ OVERVIEW TAB ═══ -->
+<div id="tab-overview" class="tab-panel active">
+  <div class="grid">
+    <div class="card">
+      <h2><span class="icon">📊</span> System Stats</h2>
+      <div id="stats-content"><div class="empty">Loading...</div></div>
+    </div>
+    <div class="card">
+      <h2><span class="icon">🧠</span> Behavioral Profile</h2>
+      <div id="profile-content"><div class="empty">Loading...</div></div>
+    </div>
+    <div class="card">
+      <h2><span class="icon">📌</span> Explicit Memories</h2>
+      <div id="explicit-content"><div class="empty">Loading...</div></div>
+    </div>
+    <div class="card">
+      <h2><span class="icon">⚡</span> Contradictions</h2>
+      <div id="contradictions-content"><div class="empty">Loading...</div></div>
+    </div>
   </div>
+</div>
 
-  <!-- Explicit Memories -->
-  <div class="card">
-    <h2>Explicit Memories</h2>
-    <div id="explicit-content"><div class="empty">Loading...</div></div>
+<!-- ═══ KNOWLEDGE GRAPH TAB ═══ -->
+<div id="tab-graph" class="tab-panel">
+  <div style="padding: 20px 24px;">
+    <div class="card full-width">
+      <h2><span class="icon">🕸️</span> Knowledge Graph — Interactive Visualization</h2>
+      <div class="graph-controls">
+        <input type="text" class="search-box" id="graph-search" placeholder="Search entity to highlight..." style="width:260px;margin:0">
+        <button class="btn btn-ghost" onclick="resetGraph()">Reset View</button>
+        <button class="btn btn-ghost" onclick="togglePhysics()">⏸ Physics</button>
+        <span style="flex:1"></span>
+        <span id="graph-info" style="font-size:12px;color:var(--dim)"></span>
+      </div>
+      <div id="graph-canvas"><canvas id="gc"></canvas></div>
+      <div class="graph-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div> Person</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div> Tool</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#bc8cff"></div> Concept</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f0883e"></div> Organization</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f778ba"></div> Project</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#39d2c0"></div> Location</div>
+        <div class="legend-item" style="margin-left:auto;font-size:11px;color:var(--dim)">Drag nodes • Scroll to zoom • Click to inspect</div>
+      </div>
+    </div>
   </div>
+</div>
 
-  <!-- Knowledge Graph Facts -->
-  <div class="card">
-    <h2>Knowledge Graph</h2>
-    <input type="text" class="search-box" id="entity-search" placeholder="Search entity..." onkeyup="searchGraph()">
-    <div id="graph-content"><div class="empty">Loading...</div></div>
+<!-- ═══ MEMORY TIMELINE TAB ═══ -->
+<div id="tab-memory" class="tab-panel">
+  <div style="padding: 20px 24px;">
+    <div class="card full-width">
+      <h2><span class="icon">🕐</span> Episodic Memory Timeline</h2>
+      <div class="graph-controls">
+        <input type="text" class="search-box" id="timeline-search" placeholder="Filter by keyword..." style="width:260px;margin:0" oninput="renderTimeline()">
+        <select id="timeline-speaker" class="search-box" style="width:140px;margin:0" onchange="renderTimeline()">
+          <option value="">All speakers</option>
+          <option value="user">User</option>
+          <option value="assistant">Assistant</option>
+          <option value="system">System</option>
+        </select>
+        <span style="flex:1"></span>
+        <span id="timeline-count" style="font-size:12px;color:var(--dim)"></span>
+      </div>
+      <div id="timeline-content" class="timeline"><div class="empty">Loading...</div></div>
+    </div>
   </div>
+</div>
 
-  <!-- Contradictions -->
-  <div class="card">
-    <h2>Contradictions</h2>
-    <div id="contradictions-content"><div class="empty">Loading...</div></div>
-  </div>
-
-  <!-- Query Tester -->
-  <div class="card">
-    <h2>Query Tester</h2>
-    <input type="text" class="search-box" id="query-input" placeholder="Ask a question...">
-    <button class="refresh-btn" onclick="runQuery()" style="margin-bottom:12px">Query Memory</button>
-    <div id="query-result"></div>
+<!-- ═══ QUERY EXPLORER TAB ═══ -->
+<div id="tab-query" class="tab-panel">
+  <div style="padding: 20px 24px;">
+    <div class="grid">
+      <div class="card full-width">
+        <h2><span class="icon">🔍</span> Query Explorer</h2>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <input type="text" class="search-box" id="query-input" placeholder="Ask a question..." style="margin:0;flex:1">
+          <button class="btn" onclick="runQuery()">Query Memory</button>
+        </div>
+        <div id="query-result"></div>
+      </div>
+      <div class="card">
+        <h2><span class="icon">📊</span> Budget Allocation</h2>
+        <div id="budget-content"><div class="empty">Run a query to see budget</div></div>
+      </div>
+      <div class="card">
+        <h2><span class="icon">🎯</span> Retrieved Chunks</h2>
+        <div id="chunks-content"><div class="empty">Run a query to see chunks</div></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
 const API = window.location.origin;
+let graphData = { nodes: [], edges: [] };
+let graphPhysics = true;
+let graphSim = null;
+let allChunks = [];
 
-async function fetchJSON(path) {
-  try {
-    const r = await fetch(API + path);
-    return await r.json();
-  } catch(e) { return null; }
+// ─── API Helpers ─────────────────────────────────────────
+async function fetchJSON(p) { try { return await (await fetch(API+p)).json(); } catch { return null; } }
+async function postJSON(p, b) { try { return await (await fetch(API+p, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})).json(); } catch { return null; } }
+
+// ─── Tab Switching ───────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab-panel#tab-${name}`).classList.add('active');
+  document.querySelectorAll('.tab')[['overview','graph','memory','query'].indexOf(name)].classList.add('active');
+  if (name === 'graph') setTimeout(loadGraph, 100);
+  if (name === 'memory') loadTimeline();
 }
 
-async function postJSON(path, body) {
-  try {
-    const r = await fetch(API + path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    return await r.json();
-  } catch(e) { return null; }
-}
-
-async function refresh() {
-  // Stats
+// ─── Overview ────────────────────────────────────────────
+async function refreshOverview() {
   const stats = await fetchJSON('/stats');
   if (stats) {
-    const ep = stats.episodic || {};
-    const sem = stats.semantic || {};
-    const expl = stats.explicit || {};
+    const ep = stats.episodic||{}, sem = stats.semantic||{}, expl = stats.explicit||{}, tai = ep.tai||{};
     document.getElementById('stats-content').innerHTML = `
-      <div class="stat"><span class="label">Episodic chunks</span><span class="value">${ep.count || 0}</span></div>
-      <div class="stat"><span class="label">Entities</span><span class="value">${sem.entities || 0}</span></div>
-      <div class="stat"><span class="label">Relations</span><span class="value">${sem.relations || 0}</span></div>
-      <div class="stat"><span class="label">Resolved entities</span><span class="value">${sem.resolved_entities || 0}</span></div>
-      <div class="stat"><span class="label">Explicit memories</span><span class="value">${expl.count || 0}</span></div>
-      <div class="stat"><span class="label">Contradictions</span><span class="value">${sem.contradictions_total || 0} (${sem.contradictions_unresolved || 0} unresolved)</span></div>
-      <div class="stat"><span class="label">Persistence</span><span class="value">${stats.persistence || 'file'}</span></div>
-    `;
+      <div class="stat"><span class="label">Episodic chunks</span><span class="value">${tai.total||ep.count||0}</span></div>
+      <div class="stat"><span class="label">TAI shards</span><span class="value">🔴 ${tai.hot||0} hot  🟡 ${tai.warm||0} warm  🔵 ${tai.cold||0} cold</span></div>
+      <div class="stat"><span class="label">Entities</span><span class="value">${sem.entities||0}</span></div>
+      <div class="stat"><span class="label">Relations</span><span class="value">${sem.relations||0}</span></div>
+      <div class="stat"><span class="label">Co-retrieval links</span><span class="value">${tai.coretrieval_links||0}</span></div>
+      <div class="stat"><span class="label">Explicit memories</span><span class="value">${expl.count||0}</span></div>
+      <div class="stat"><span class="label">Contradictions</span><span class="value">${sem.contradictions_total||0} total / ${sem.contradictions_unresolved||0} unresolved</span></div>
+      <div class="stat"><span class="label">Persistence</span><span class="value" style="color:var(--green)">${stats.persistence||'file'}</span></div>`;
     document.getElementById('status').innerHTML = '<span class="status-dot ok"></span>Connected';
   } else {
     document.getElementById('status').innerHTML = '<span class="status-dot err"></span>Disconnected';
   }
-
   // Profile
   const profile = await fetchJSON('/profile');
-  if (profile && profile.priors) {
-    const dims = profile.priors;
-    let html = '';
-    for (const [name, data] of Object.entries(dims)) {
-      const pct = Math.round(data.value * 100);
-      html += `<div class="profile-bar">
-        <span class="dim-name">${name.replace(/_/g,' ')}</span>
-        <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
-        <span class="dim-value">${pct}%</span>
-      </div>`;
+  if (profile?.priors) {
+    const colors = {response_depth:'var(--accent)',formality:'var(--purple)',domain_expertise:'var(--green)',verbosity_preference:'var(--orange)'};
+    let h = '';
+    for (const [n,d] of Object.entries(profile.priors)) {
+      const p = Math.round(d.value*100);
+      h += `<div class="profile-bar"><span class="dim-name">${n.replace(/_/g,' ')}</span><div class="bar-bg"><div class="bar-fill" style="width:${p}%;background:${colors[n]||'var(--accent)'}"></div></div><span class="dim-value">${p}%</span></div>`;
     }
-    document.getElementById('profile-content').innerHTML = html || '<div class="empty">No profile data yet</div>';
+    document.getElementById('profile-content').innerHTML = h||'<div class="empty">No signals yet</div>';
   }
-
   // Explicit
-  const explicit = await fetchJSON('/explicit');
-  if (explicit && explicit.length) {
-    let html = '';
-    for (const e of explicit) {
-      html += `<div class="memory-entry"><span class="type-badge">${e.entry_type}</span> <span class="key">${e.key}</span>: ${e.value}</div>`;
-    }
-    document.getElementById('explicit-content').innerHTML = html;
+  const expl = await fetchJSON('/explicit');
+  if (expl?.length) {
+    const badges = {fact:'badge-fact',preference:'badge-pref',instruction:'badge-inst',context:'badge-fact'};
+    document.getElementById('explicit-content').innerHTML = expl.map(e => `<div class="fact-row"><span class="badge ${badges[e.entry_type]||'badge-fact'}">${e.entry_type}</span><span class="entity-name">${e.key}</span><span style="color:var(--dim)">→</span> ${e.value}</div>`).join('');
   } else {
     document.getElementById('explicit-content').innerHTML = '<div class="empty">No explicit memories</div>';
   }
-
-  // Graph entities
-  const entities = await fetchJSON('/graph/entities');
-  if (entities && entities.entities && entities.entities.length) {
-    let html = '';
-    for (const e of entities.entities.slice(0, 20)) {
-      html += `<div class="fact"><strong>${e.name || e.key}</strong> <span class="confidence">(${e.entity_type}, mentions: ${e.mention_count || 1})</span></div>`;
-    }
-    document.getElementById('graph-content').innerHTML = html;
-  } else {
-    document.getElementById('graph-content').innerHTML = '<div class="empty">No entities in graph</div>';
-  }
-
   // Contradictions
-  const contras = await fetchJSON('/graph/contradictions');
-  if (contras && contras.contradictions && contras.contradictions.length) {
-    let html = '';
-    for (const c of contras.contradictions) {
-      const fa = c.fact_a || {};
-      const fb = c.fact_b || {};
-      const status = c.resolution === 'unresolved' ? '&#9888;' : '&#10003;';
-      html += `<div class="fact">${status} <span class="predicate">${c.contradiction_type}</span>: "${fa.subject} ${fa.predicate} ${fa.object}" vs "${fb.subject} ${fb.predicate} ${fb.object}" <span class="confidence">[${c.resolution}]</span></div>`;
-    }
-    document.getElementById('contradictions-content').innerHTML = html;
+  const c = await fetchJSON('/graph/contradictions');
+  if (c?.contradictions?.length) {
+    document.getElementById('contradictions-content').innerHTML = c.contradictions.map(x => {
+      const a=x.fact_a||{}, b=x.fact_b||{};
+      const icon = x.resolution==='unresolved' ? '⚠️' : '✅';
+      return `<div class="fact-row">${icon} <span class="predicate">${x.contradiction_type}</span>: <span class="entity-name">${a.subject}</span> ${a.predicate} <span class="entity-name">${a.object}</span> <span style="color:var(--dim)">vs</span> <span class="entity-name">${b.subject}</span> ${b.predicate} <span class="entity-name">${b.object}</span> <span class="conf">[${x.resolution}${x.winner?' → '+x.winner:''}]</span></div>`;
+    }).join('');
   } else {
-    document.getElementById('contradictions-content').innerHTML = '<div class="empty">No contradictions detected</div>';
+    document.getElementById('contradictions-content').innerHTML = '<div class="empty">No contradictions</div>';
   }
 }
 
-async function searchGraph() {
-  const q = document.getElementById('entity-search').value.trim();
-  if (!q) { refresh(); return; }
-  const result = await postJSON('/graph/query', { entities: [q], max_depth: 2 });
-  if (result && result.facts && result.facts.length) {
-    let html = '';
-    for (const f of result.facts) {
-      html += `<div class="fact"><strong>${f.subject}</strong> <span class="predicate">${f.predicate}</span> <strong>${f.object}</strong> <span class="confidence">(conf: ${f.confidence})</span></div>`;
+// ─── Knowledge Graph (Force-directed Canvas) ─────────────
+async function loadGraph() {
+  const ents = await fetchJSON('/graph/entities');
+  if (!ents?.entities) return;
+  const entities = ents.entities;
+  const nodes = [], nodeMap = {};
+  const typeColors = {person:'#58a6ff',tool:'#3fb950',concept:'#bc8cff',org:'#f0883e',project:'#f778ba',location:'#39d2c0'};
+
+  for (const e of entities) {
+    const id = e.key || e.name?.toLowerCase();
+    if (!id || nodeMap[id]) continue;
+    const node = { id, name: e.name||id, type: e.entity_type||'concept', mentions: e.mention_count||1, x: Math.random()*800+100, y: Math.random()*500+50, vx:0, vy:0, color: typeColors[e.entity_type]||'#bc8cff', radius: Math.min(30, 8 + (e.mention_count||1)*2) };
+    nodes.push(node);
+    nodeMap[id] = node;
+  }
+
+  // Fetch relations for each entity
+  const edges = [];
+  const seenEdges = new Set();
+  for (const n of nodes) {
+    const r = await postJSON('/graph/query', {entities:[n.name], max_depth:1});
+    if (r?.facts) {
+      for (const f of r.facts) {
+        const sKey = f.subject.toLowerCase(), oKey = f.object.toLowerCase();
+        const eKey = `${sKey}|${f.predicate}|${oKey}`;
+        if (seenEdges.has(eKey)) continue;
+        seenEdges.add(eKey);
+        if (nodeMap[sKey] && nodeMap[oKey]) {
+          edges.push({ source: nodeMap[sKey], target: nodeMap[oKey], predicate: f.predicate, confidence: f.confidence, status: f.status||'active' });
+        }
+      }
     }
-    document.getElementById('graph-content').innerHTML = html;
-  } else {
-    document.getElementById('graph-content').innerHTML = `<div class="empty">No facts found for "${q}"</div>`;
+  }
+
+  graphData = { nodes, edges };
+  document.getElementById('graph-info').textContent = `${nodes.length} entities, ${edges.length} relations`;
+  startGraphSim();
+}
+
+function startGraphSim() {
+  const canvas = document.getElementById('gc');
+  const container = document.getElementById('graph-canvas');
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const {nodes, edges} = graphData;
+
+  let dragging = null, offsetX=0, offsetY=0, panX=0, panY=0, zoom=1, highlight='';
+
+  // Search highlight
+  document.getElementById('graph-search').oninput = e => { highlight = e.target.value.toLowerCase(); };
+
+  canvas.onmousedown = e => {
+    const mx = (e.offsetX-panX)/zoom, my = (e.offsetY-panY)/zoom;
+    for (const n of nodes) { if (Math.hypot(n.x-mx,n.y-my) < n.radius+4) { dragging=n; offsetX=n.x-mx; offsetY=n.y-my; return; } }
+  };
+  canvas.onmousemove = e => { if(dragging){const mx=(e.offsetX-panX)/zoom,my=(e.offsetY-panY)/zoom;dragging.x=mx+offsetX;dragging.y=my+offsetY;dragging.vx=0;dragging.vy=0;} };
+  canvas.onmouseup = () => { dragging=null; };
+  canvas.onwheel = e => { e.preventDefault(); const f=e.deltaY>0?0.92:1.08; zoom*=f; panX=e.offsetX-(e.offsetX-panX)*f; panY=e.offsetY-(e.offsetY-panY)*f; };
+
+  function tick() {
+    if (graphPhysics && !dragging) {
+      // Repulsion
+      for (let i=0;i<nodes.length;i++) for (let j=i+1;j<nodes.length;j++) {
+        let dx=nodes[j].x-nodes[i].x, dy=nodes[j].y-nodes[i].y, d=Math.max(1,Math.hypot(dx,dy));
+        const f=400/d/d; nodes[i].vx-=dx/d*f; nodes[i].vy-=dy/d*f; nodes[j].vx+=dx/d*f; nodes[j].vy+=dy/d*f;
+      }
+      // Attraction (edges)
+      for (const e of edges) {
+        let dx=e.target.x-e.source.x, dy=e.target.y-e.source.y, d=Math.hypot(dx,dy);
+        const f=(d-120)*0.005; e.source.vx+=dx/d*f; e.source.vy+=dy/d*f; e.target.vx-=dx/d*f; e.target.vy-=dy/d*f;
+      }
+      // Center gravity
+      for (const n of nodes) { n.vx+=(W/2-n.x)*0.0005; n.vy+=(H/2-n.y)*0.0005; n.vx*=0.92; n.vy*=0.92; n.x+=n.vx; n.y+=n.vy; }
+    }
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    ctx.translate(panX,panY);
+    ctx.scale(zoom,zoom);
+
+    // Edges
+    for (const e of edges) {
+      const isSuper = e.status==='superseded' || e.status==='retracted';
+      ctx.beginPath(); ctx.moveTo(e.source.x,e.source.y); ctx.lineTo(e.target.x,e.target.y);
+      ctx.strokeStyle = isSuper ? 'rgba(248,81,73,.2)' : 'rgba(88,166,255,.15)';
+      ctx.lineWidth = isSuper ? 1 : 1.5;
+      if(isSuper) ctx.setLineDash([4,4]); else ctx.setLineDash([]);
+      ctx.stroke();
+      // Label
+      const mx=(e.source.x+e.target.x)/2, my=(e.source.y+e.target.y)/2;
+      ctx.font = '10px system-ui'; ctx.fillStyle='rgba(188,140,255,.6)'; ctx.textAlign='center';
+      ctx.fillText(e.predicate, mx, my-4);
+      // Arrow
+      const angle = Math.atan2(e.target.y-e.source.y, e.target.x-e.source.x);
+      const ax = e.target.x - Math.cos(angle)*(e.target.radius+6);
+      const ay = e.target.y - Math.sin(angle)*(e.target.radius+6);
+      ctx.beginPath(); ctx.moveTo(ax,ay);
+      ctx.lineTo(ax-8*Math.cos(angle-0.4),ay-8*Math.sin(angle-0.4));
+      ctx.lineTo(ax-8*Math.cos(angle+0.4),ay-8*Math.sin(angle+0.4));
+      ctx.closePath(); ctx.fillStyle=isSuper?'rgba(248,81,73,.3)':'rgba(88,166,255,.3)'; ctx.fill();
+    }
+
+    // Nodes
+    for (const n of nodes) {
+      const isHL = highlight && n.name.toLowerCase().includes(highlight);
+      // Glow
+      if (isHL) { ctx.beginPath(); ctx.arc(n.x,n.y,n.radius+8,0,Math.PI*2); ctx.fillStyle=n.color+'33'; ctx.fill(); }
+      // Circle
+      ctx.beginPath(); ctx.arc(n.x,n.y,n.radius,0,Math.PI*2);
+      ctx.fillStyle = isHL ? n.color : n.color+'cc';
+      ctx.fill();
+      ctx.strokeStyle = isHL ? '#fff' : n.color+'55';
+      ctx.lineWidth = isHL ? 2 : 1;
+      ctx.stroke();
+      // Label
+      ctx.font = `${isHL?'bold ':''}12px system-ui`;
+      ctx.fillStyle = isHL ? '#fff' : 'rgba(201,209,217,.85)';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.name, n.x, n.y + n.radius + 16);
+    }
+    ctx.restore();
+  }
+
+  tick();
+}
+
+function resetGraph() { loadGraph(); }
+function togglePhysics() { graphPhysics = !graphPhysics; document.querySelectorAll('.btn-ghost')[1].textContent = graphPhysics ? '⏸ Physics' : '▶ Physics'; }
+
+// ─── Memory Timeline ─────────────────────────────────────
+async function loadTimeline() {
+  const result = await postJSON('/query', { query: 'everything', top_k: 100 });
+  if (result?.episodic_chunks) {
+    allChunks = result.episodic_chunks;
+    renderTimeline();
   }
 }
 
+function renderTimeline() {
+  const filter = document.getElementById('timeline-search').value.toLowerCase();
+  const speakerFilter = document.getElementById('timeline-speaker').value;
+  let chunks = allChunks;
+  if (filter) chunks = chunks.filter(c => c.text.toLowerCase().includes(filter));
+  if (speakerFilter) chunks = chunks.filter(c => c.speaker === speakerFilter);
+
+  document.getElementById('timeline-count').textContent = `${chunks.length} memories`;
+
+  if (!chunks.length) { document.getElementById('timeline-content').innerHTML = '<div class="empty">No memories found</div>'; return; }
+
+  document.getElementById('timeline-content').innerHTML = chunks.map(c => {
+    const speaker = c.speaker || 'unknown';
+    const cid = c.conversation_id || '';
+    const score = c.score?.toFixed(3) || '—';
+    const text = c.text.length > 200 ? c.text.slice(0,200)+'...' : c.text;
+    return `<div class="timeline-item">
+      <div class="time">${cid}</div>
+      <div class="content"><span class="speaker-${speaker}">${text}</span></div>
+      <div class="meta"><span>relevance: ${score}</span><span>speaker: ${speaker}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Query Explorer ──────────────────────────────────────
 async function runQuery() {
   const q = document.getElementById('query-input').value.trim();
   if (!q) return;
   document.getElementById('query-result').innerHTML = '<div class="empty">Querying...</div>';
-  const result = await postJSON('/query', { query: q, top_k: 5 });
-  if (result && result.context_text) {
-    document.getElementById('query-result').innerHTML = `<pre style="white-space:pre-wrap;font-size:13px;color:var(--text);max-height:300px;overflow:auto">${result.context_text}</pre>
-    <div class="stat" style="margin-top:8px"><span class="label">Tokens</span><span class="value">${result.tokens_estimate}</span></div>`;
-  } else {
-    document.getElementById('query-result').innerHTML = '<div class="empty">No results</div>';
-  }
+  const r = await postJSON('/query', { query: q, top_k: 8 });
+  if (!r) { document.getElementById('query-result').innerHTML = '<div class="empty">Error</div>'; return; }
+
+  document.getElementById('query-result').innerHTML = `<div class="query-result-box">${r.context_text||'No context'}</div>
+    <div style="margin-top:8px;font-size:12px;color:var(--dim)">Tokens: ${r.tokens_estimate} / 4000</div>`;
+
+  // Budget
+  const ba = r.budget_allocation||{};
+  const total = ba.total||1;
+  const budgetColors = {episodic:'var(--accent)',semantic:'var(--purple)',explicit:'var(--green)',behavioral:'var(--orange)',working:'var(--pink)'};
+  document.getElementById('budget-content').innerHTML = Object.entries(ba).filter(([k])=>k!=='total').map(([k,v]) => {
+    const pct = Math.round(v/total*100);
+    return `<div class="profile-bar"><span class="dim-name">${k}</span><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${budgetColors[k]||'var(--accent)'}"></div></div><span class="dim-value">${v}</span></div>`;
+  }).join('') + `<div class="stat" style="margin-top:8px"><span class="label">Total</span><span class="value">${total}</span></div>`;
+
+  // Chunks
+  const chunks = r.episodic_chunks||[];
+  document.getElementById('chunks-content').innerHTML = chunks.length ? chunks.map((c,i) => {
+    const text = c.text.length>120 ? c.text.slice(0,120)+'...' : c.text;
+    return `<div class="fact-row" style="flex-direction:column;align-items:flex-start"><div style="display:flex;gap:8px;width:100%"><span class="badge badge-active">#${i+1}</span><span class="conf">${c.conversation_id||''}</span><span style="flex:1"></span><span class="conf">score: ${c.score?.toFixed(3)}</span></div><div style="margin-top:4px;font-size:13px">${text}</div></div>`;
+  }).join('') : '<div class="empty">No chunks retrieved</div>';
 }
 
 document.getElementById('query-input').addEventListener('keydown', e => { if(e.key==='Enter') runQuery(); });
 
-refresh();
-setInterval(refresh, 30000);
+// ─── Init ────────────────────────────────────────────────
+async function refreshAll() { await refreshOverview(); }
+refreshAll();
+setInterval(refreshAll, 30000);
 </script>
 </body>
 </html>

@@ -31,7 +31,21 @@
       "Bash(find /Users/walebadr/Desktop/associative_memory/amem -name \"*.py\" -type f ! -path \"*__pycache__*\" -exec wc -l {} +)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git commit -m ':*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(python3 /Users/walebadr/Desktop/associative_memory/serve_api.py)",
+      "Bash(echo \"API server starting on port 8420 \\(PID: $!\\)\")",
+      "Bash(python3 /Users/walebadr/Desktop/associative_memory/serve_proxy.py)",
+      "Bash(echo \"OpenAI proxy starting on port 8421 \\(PID: $!\\)\")",
+      "Bash(curl -s http://localhost:8420/health)",
+      "Bash(python3 -m json.tool)",
+      "WebSearch",
+      "Bash(git commit -m 'Add roadmap with naming, competitive analysis, graph v2 architecture:*)",
+      "Bash(sed -i '' 's/associative-memory/amem/g' README.md mcp/claude_desktop_config.json)",
+      "Bash(sed -i '' 's/Associative Memory/amem/g' README.md LICENSE dashboard/index.html mcp/server.py api/openai_compat.py)",
+      "Bash(python3)",
+      "Bash(git commit -m 'Rename to amem everywhere + add deep competitive analysis:*)"
     ]
   }
 }
