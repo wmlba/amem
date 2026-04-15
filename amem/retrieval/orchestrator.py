@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import math
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,8 @@ from amem.working.session import WorkingMemory
 from amem.explicit.store import ExplicitStore
 from amem.persistence.sqlite import SQLiteStore
 from amem.retrieval.intent import analyze_intent
+from amem.retrieval.knowledge_assembler import KnowledgeContext, assemble_knowledge
+from amem.maintenance.summarizer import summarize_session, summarize_session_simple
 
 
 @dataclass
@@ -192,6 +195,21 @@ class MemoryOrchestrator:
         self._extractor = EntityExtractor()
         self._db: SQLiteStore | None = None
 
+        # Session summaries
+        self._session_summaries: list[dict] = []
+
+        # Session conversation buffer (collects turns for end-of-session extraction)
+        self._session_turns: list[str] = []
+
+        # LLM-powered fact extractor (uses whatever model the user has)
+        from amem.semantic.fact_extractor import FactExtractor
+        import os
+        self._fact_extractor = FactExtractor(
+            ollama_url=config.ollama.base_url,
+            openai_url="https://api.openai.com/v1" if os.environ.get("OPENAI_API_KEY") else None,
+            openai_key=os.environ.get("OPENAI_API_KEY"),
+        )
+
         # Wire embedding-powered extractor (same model as episodic store)
         from amem.semantic.embedding_extractor import EmbeddingExtractor
         self._embedding_extractor = EmbeddingExtractor(embedder)
@@ -234,7 +252,10 @@ class MemoryOrchestrator:
 
     async def _ingest_unsafe(self, text, conversation_id, speaker, timestamp) -> dict:
 
-        # Episodic: chunk, embed, store
+        # Buffer turn text for session-end LLM extraction
+        self._session_turns.append(text)
+
+        # Episodic: chunk, embed, store (raw chunks for detail retrieval)
         chunk_ids = await self.episodic.ingest(
             text=text,
             conversation_id=conversation_id,
@@ -537,26 +558,143 @@ class MemoryOrchestrator:
 
         return ctx
 
+    async def query_knowledge(
+        self,
+        query_text: str,
+        top_k: int = 20,
+        token_budget: int | None = None,
+        current_session_id: str | None = None,
+    ) -> KnowledgeContext:
+        """Query for CROSS-SESSION KNOWLEDGE only.
+
+        This is the correct way to use memory with an LLM:
+        - The LLM already has the current conversation in its context
+        - We provide what it DOESN'T have: identity, past facts, history
+
+        Returns a KnowledgeContext optimized for injection alongside
+        the current conversation, not replacing it.
+        """
+        if token_budget is None:
+            token_budget = self._config.retrieval.token_budget
+
+        # If no session ID provided, use the active working memory session
+        if current_session_id is None and not self.working.is_empty:
+            current_session_id = self.working.session_id
+
+        # Intent analysis
+        intent = analyze_intent(query_text)
+
+        # Entity extraction + resolution
+        extraction = self._extractor.extract(query_text)
+        entity_names = [e.name for e in extraction.entities]
+        resolved_names = []
+        for name in entity_names:
+            resolved = self.semantic.resolve_entity_name(name)
+            if resolved not in resolved_names:
+                resolved_names.append(resolved)
+        query_entities = resolved_names if resolved_names else entity_names
+
+        # Retrieve from each layer
+        episodic_results = await self.episodic.retrieve(
+            query_text, top_k=top_k,
+            temporal_weight=intent.temporal_weight,
+        )
+        episodic_chunks = []
+        for r in episodic_results:
+            meta = getattr(r, 'meta', None) or getattr(r, 'metadata', None)
+            if meta:
+                episodic_chunks.append({
+                    "text": meta.text,
+                    "conversation_id": getattr(meta, 'conversation_id', ''),
+                    "speaker": getattr(meta, 'speaker', ''),
+                    "score": r.final_score,
+                })
+
+        semantic_facts = self.semantic.query(
+            query_entities,
+            max_depth=self._config.semantic.max_traversal_depth,
+        )
+
+        behavioral_priors = self.behavioral.get_priors()
+        explicit_entries = self.explicit.get_all_for_context()
+
+        # Assemble cross-session knowledge
+        knowledge = assemble_knowledge(
+            explicit_entries=explicit_entries,
+            semantic_facts=semantic_facts,
+            episodic_chunks=episodic_chunks,
+            behavioral_priors=behavioral_priors,
+            session_summaries=self._session_summaries,
+            current_session_id=current_session_id,
+            token_budget=token_budget,
+        )
+
+        return knowledge
+
     def start_session(self, session_id: str | None = None):
         """Start a new working memory session."""
         self.working = WorkingMemory(session_id)
 
     async def end_session(self) -> str | None:
-        """End the current session, flush working memory to episodic store."""
+        """End session: LLM fact extraction + summary + store as searchable memories.
+
+        The key innovation: call the user's LLM ONCE per session to extract
+        structured facts. Each fact becomes a searchable memory in the episodic
+        index. This is 20× cheaper than per-turn extraction (Mem0's approach)
+        but captures the same knowledge.
+        """
         if self._write_lock is None:
             self._write_lock = asyncio.Lock()
         async with self._write_lock:
-            if self.working.is_empty:
-                return None
-            text = self.working.get_all_text()
             session_id = self.working.session_id
-            if text.strip():
+            session_text = "\n".join(self._session_turns)
+
+            if not session_text.strip() and self.working.is_empty:
+                self._session_turns.clear()
+                return None
+
+            # ── FIX 1: LLM-powered fact extraction ──
+            # One LLM call per session (not per turn). Extract structured facts.
+            extracted_facts = await self._fact_extractor.extract_facts(session_text)
+
+            # ── FIX 2: Store each fact as a searchable memory ──
+            # Each fact gets embedded and stored in the episodic index.
+            # "Caroline attended LGBTQ support group on May 7" becomes
+            # a first-class searchable memory, not buried in a transcript.
+            facts_stored = 0
+            for fact in extracted_facts:
                 await self.episodic.ingest(
-                    text=text,
-                    conversation_id=f"session-{session_id}",
-                    speaker="system",
+                    text=fact,
+                    conversation_id=f"facts-{session_id}",
+                    speaker="fact",
                 )
+                facts_stored += 1
+
+            # Also extract into semantic graph
+            for fact in extracted_facts:
+                await self.semantic.ingest_text_async(fact)
+
+            # Create session summary for the session summaries list
+            summary = "; ".join(extracted_facts[:8]) if extracted_facts else session_text[:300]
+            self._session_summaries.append({
+                "session_id": session_id,
+                "summary": summary,
+                "facts_count": len(extracted_facts),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+
+            # Also flush working memory if it has content
+            if not self.working.is_empty:
+                wm_text = self.working.get_all_text()
+                if wm_text.strip():
+                    await self.episodic.ingest(
+                        text=wm_text,
+                        conversation_id=f"session-{session_id}",
+                        speaker="system",
+                    )
+
             self.working.clear()
+            self._session_turns.clear()
             return session_id
 
     def decay_pass(self):

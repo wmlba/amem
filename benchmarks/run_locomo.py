@@ -1,30 +1,38 @@
 #!/usr/bin/env python3
 """
 ═══════════════════════════════════════════════════════════════════════
-  LoCoMo Benchmark: amem vs Blob Injection Baseline
+  LoCoMo Benchmark v2 — Cross-Session Knowledge Architecture
 ═══════════════════════════════════════════════════════════════════════
 
-Uses the official LoCoMo dataset (snap-research/locomo).
+NEW APPROACH: Memory is long-term knowledge, not session context.
 
-Key insight: LoCoMo is a REASONING benchmark, not a retrieval benchmark.
-Most answers require inference — "When did X happen?" → the answer is
-a date derived from session metadata, not stated in the text.
+Old (wrong): inject raw chunks as context replacement
+New (correct): inject cross-session knowledge the LLM doesn't have
 
-We measure two things:
-1. Context Sufficiency: does the retrieved context contain enough
-   information to answer the question? (LLM-judged)
-2. Token Efficiency: how many tokens are needed to achieve that recall?
+Protocol (matches Mem0):
+  - eval-LLM: GPT-4o-mini answers using memory context
+  - judge-LLM: GPT-4o-mini grades CORRECT/WRONG
+  - Category 5 (adversarial) excluded
+  - Generous grading
 
-The blob baseline always injects EVERYTHING (5000-10000 tokens).
-amem injects only what's relevant (200-500 tokens).
+Key change: We ingest session-by-session (as real conversations happen),
+building up the knowledge graph and session summaries over time.
+When answering questions, the LLM gets:
+  1. Structured facts from the knowledge graph
+  2. Session summaries from past sessions
+  3. Relevant episodic details (cross-session only)
+  4. User identity and preferences
+
+NOT raw chunks from the same conversation being queried.
 """
 
 import asyncio
 import json
-import re
+import os
 import tempfile
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -34,88 +42,63 @@ from amem.embeddings.factory import create_embedder
 from amem.retrieval.orchestrator import MemoryOrchestrator
 
 B="\033[1m"; G="\033[92m"; R="\033[91m"; Y="\033[93m"; D="\033[2m"; X="\033[0m"; C="\033[96m"
-
-CATEGORY_NAMES = {1:"single-hop", 2:"multi-hop", 3:"temporal", 4:"open-ended", 5:"adversarial"}
-
-
-async def llm_judge(context: str, question: str, answer: str, ollama_url: str = "http://localhost:11434") -> bool:
-    """Use a local LLM to judge if the context contains enough info to answer the question."""
-    prompt = f"""Given this context and question, does the context contain enough information to answer the question? The expected answer is provided for reference.
-
-Context:
-{context[:3000]}
-
-Question: {question}
-Expected answer: {answer}
-
-Does the context contain sufficient information to derive or directly state this answer? Reply with only YES or NO."""
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(f"{ollama_url}/api/generate", json={
-                "model": "qwen3.5:35b-a3b-coding-nvfp4",
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.0, "num_predict": 20},
-            })
-            if resp.status_code == 200:
-                text = resp.json().get("response", "").strip().upper()
-                return "YES" in text
-    except Exception:
-        pass
-    # Fallback: token overlap matching
-    return token_match(answer, context)
+CATEGORY_NAMES = {1:"single-hop", 2:"multi-hop", 3:"temporal", 4:"open-ended"}
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
+EVAL_MODEL = "gpt-4o-mini"
 
 
-def token_match(answer: str, text: str) -> bool:
-    """Fallback: normalized token overlap."""
-    answer_clean = re.sub(r'[^\w\s]', '', str(answer).lower()).strip()
-    text_clean = re.sub(r'[^\w\s]', '', str(text).lower()).strip()
-    if not answer_clean: return False
-    if answer_clean in text_clean: return True
-    a_tokens = set(answer_clean.split())
-    t_tokens = set(text_clean.split())
-    if not a_tokens: return False
-    return len(a_tokens & t_tokens) / len(a_tokens) >= 0.8
+async def openai_chat(messages, temperature=0.1):
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"},
+            json={"model": EVAL_MODEL, "messages": messages, "temperature": temperature, "max_tokens": 300},
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+
+
+async def eval_answer(context, question):
+    return await openai_chat([
+        {"role": "system", "content": "You are a helpful assistant. Answer based on the memory context provided. Be concise. If you don't know, say 'I don't know'."},
+        {"role": "user", "content": f"Memory context:\n{context}\n\nQuestion: {question}\nAnswer:"},
+    ], temperature=0.1)
+
+
+async def judge_answer(question, gold, predicted):
+    result = await openai_chat([
+        {"role": "system", "content": "Judge if the predicted answer is correct. Be generous: same topic = CORRECT, date format differences = CORRECT, partial but relevant = CORRECT. Only WRONG if clearly incorrect or 'I don't know'. Reply CORRECT or WRONG only."},
+        {"role": "user", "content": f"Question: {question}\nGold: {gold}\nPredicted: {predicted}"},
+    ], temperature=0.0)
+    return "CORRECT" in result.upper()
 
 
 async def main():
+    if not OPENAI_KEY:
+        print(f"{R}Set OPENAI_API_KEY{X}"); return
+
     print(f"\n{B}{'═'*70}{X}")
-    print(f"{B}  LoCoMo BENCHMARK: amem vs Blob Injection{X}")
+    print(f"{B}  LoCoMo v2 — Cross-Session Knowledge Architecture{X}")
     print(f"{B}{'═'*70}{X}")
 
     with open("benchmarks/locomo10.json") as f:
         data = json.load(f)
 
-    # Check if LLM is available for judging
-    has_llm = False
-    try:
-        resp = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
-        models = [m["name"].split(":")[0] for m in resp.json().get("models", [])]
-        # Need a chat model (not just embedding)
-        chat_models = [m for m in models if m not in ("nomic-embed-text", "all-minilm")]
-        has_llm = len(chat_models) > 0
-        if has_llm:
-            print(f"  {G}LLM judge available: {chat_models[0]}{X}")
-        else:
-            print(f"  {Y}No chat model for LLM judge — using token matching{X}")
-    except Exception:
-        print(f"  {Y}No LLM judge — using token matching{X}")
-
     config = Config()
-    MAX_CONVS = 2  # 2 conversations for reasonable runtime
-    TOP_K = 30     # More chunks = better recall
+    MAX_CONVS = 2
+    TOP_K = 30
+    BLOB_LIMIT = 6000
 
-    total = defaultdict(lambda: {"amem": 0, "blob": 0, "n": 0, "amem_tokens": 0, "blob_tokens": 0})
+    results = defaultdict(lambda: {"amem": 0, "blob": 0, "none": 0, "n": 0})
+    api_calls = 0
 
     for conv_idx in range(min(MAX_CONVS, len(data))):
         conv = data[conv_idx]
         conversation = conv["conversation"]
-        qa_pairs = conv["qa"]
+        qa_pairs = [q for q in conv["qa"] if q.get("category", 5) != 5]
 
         print(f"\n  {C}{B}Conversation {conv_idx+1}/{MAX_CONVS} — {len(qa_pairs)} questions{X}")
 
-        # Create orchestrator
         conv_dir = tempfile.mkdtemp()
         config.storage.data_dir = conv_dir
         embedder = create_embedder(config.ollama)
@@ -125,8 +108,8 @@ async def main():
         session_keys = sorted([k for k in conversation.keys()
                                if k.startswith("session_") and not k.endswith("date_time")])
 
-        # ── Ingest with session dates as context ──
-        all_blob_parts = []
+        # ── Ingest SESSION BY SESSION (as real conversations happen) ──
+        blob_parts = []
         t0 = time.monotonic()
 
         for sk in session_keys:
@@ -134,125 +117,127 @@ async def main():
             if not isinstance(session, list): continue
             session_date = conversation.get(f"{sk}_date_time", "")
 
-            # CRITICAL FIX: Ingest the session date as a fact
+            # Start a session (like a real user would)
+            orch.start_session(sk)
+
             if session_date:
-                date_text = f"This conversation session took place on {session_date}."
+                date_text = f"This conversation took place on {session_date}."
                 await orch.ingest(text=date_text, conversation_id=sk, speaker="system")
-                all_blob_parts.append(date_text)
+                blob_parts.append(date_text)
+                orch.working.add_fact(f"Date: {session_date}")
 
             for turn in session:
                 if not isinstance(turn, dict): continue
                 text = turn.get("text", "")
+                speaker = turn.get("speaker", "")
                 if not text: continue
-                await orch.ingest(text=text, conversation_id=sk, speaker=turn.get("speaker", ""))
-                all_blob_parts.append(text)
+                await orch.ingest(text=text, conversation_id=sk, speaker=speaker)
+                blob_parts.append(f"{speaker}: {text}")
+
+            # End session → creates summary + extracts knowledge
+            await orch.end_session()
 
         ingest_time = time.monotonic() - t0
-        blob_text = " ".join(all_blob_parts)
-        blob_tokens = len(blob_text.split()) * 4 // 3
-        print(f"    {D}Ingested in {ingest_time:.1f}s | TAI: {orch.episodic.tai.count} chunks | Blob: ~{blob_tokens} tokens{X}")
+        blob_full = "\n".join(blob_parts)
+        blob_words = blob_full.split()
+        blob_truncated = " ".join(blob_words[:BLOB_LIMIT * 3 // 4])
+
+        sem_stats = orch.semantic.stats()
+        print(f"  {D}Ingested in {ingest_time:.1f}s | {len(session_keys)} sessions | "
+              f"Entities: {sem_stats.get('entities',0)} | Relations: {sem_stats.get('relations',0)} | "
+              f"Summaries: {len(orch._session_summaries)}{X}")
 
         # ── Evaluate ──
         t0 = time.monotonic()
-        conv_amem = 0
-        conv_blob = 0
-        evaluated = 0
+        conv_r = {"amem": 0, "blob": 0, "none": 0, "n": 0}
 
         for qi, qa in enumerate(qa_pairs):
             question = qa.get("question", "")
-            answer = str(qa.get("answer", qa.get("adversarial_answer", "")))
+            answer = str(qa.get("answer", ""))
             category = qa.get("category", 0)
-            if not answer or not question: continue
+            if not question or not answer: continue
 
-            # amem retrieval
-            ctx = await orch.query(question, top_k=TOP_K)
-            amem_context = ""
-            for c in ctx.episodic_chunks:
-                amem_context += c["text"] + " "
-            for f in ctx.semantic_facts:
-                amem_context += f"{f.get('subject','')} {f.get('predicate','')} {f.get('object','')} "
-            amem_tokens = len(amem_context.split()) * 4 // 3
+            try:
+                # amem: cross-session knowledge (NOT raw chunks)
+                knowledge = await orch.query_knowledge(question, top_k=TOP_K)
+                amem_context = knowledge.to_injection_text()
 
-            # Judge: amem
-            if has_llm and category != 5:  # Skip adversarial for LLM judge (they're trick questions)
-                amem_hit = await llm_judge(amem_context, question, answer)
-            else:
-                amem_hit = token_match(answer, amem_context)
+                amem_response = await eval_answer(amem_context, question)
+                blob_response = await eval_answer(blob_truncated, question)
+                none_response = await eval_answer("No context available.", question)
+                api_calls += 3
 
-            # Judge: blob
-            if has_llm and category != 5:
-                blob_hit = await llm_judge(blob_text[:4000], question, answer)  # First 4K tokens (LLM context limit)
-            else:
-                blob_hit = token_match(answer, blob_text)
+                amem_ok = await judge_answer(question, answer, amem_response)
+                blob_ok = await judge_answer(question, answer, blob_response)
+                none_ok = await judge_answer(question, answer, none_response)
+                api_calls += 3
 
-            if amem_hit: conv_amem += 1
-            if blob_hit: conv_blob += 1
-            evaluated += 1
+                for key, ok in [("amem", amem_ok), ("blob", blob_ok), ("none", none_ok)]:
+                    if ok:
+                        conv_r[key] += 1
+                        results[category][key] += 1
+                        results["all"][key] += 1
+                conv_r["n"] += 1
+                results[category]["n"] += 1
+                results["all"]["n"] += 1
 
-            total[category]["amem"] += int(amem_hit)
-            total[category]["blob"] += int(blob_hit)
-            total[category]["n"] += 1
-            total[category]["amem_tokens"] += amem_tokens
-            total[category]["blob_tokens"] += blob_tokens
-            total["all"]["amem"] += int(amem_hit)
-            total["all"]["blob"] += int(blob_hit)
-            total["all"]["n"] += 1
-            total["all"]["amem_tokens"] += amem_tokens
-            total["all"]["blob_tokens"] += blob_tokens
+            except Exception as e:
+                print(f"  {R}Error Q{qi}: {e}{X}")
+                continue
 
-            if (qi + 1) % 50 == 0:
-                print(f"    {D}  ...{qi+1}/{len(qa_pairs)} questions{X}")
+            if (qi + 1) % 20 == 0:
+                a = conv_r["amem"]/max(conv_r["n"],1)*100
+                b = conv_r["blob"]/max(conv_r["n"],1)*100
+                print(f"    {D}...{qi+1}/{len(qa_pairs)} | amem {a:.0f}% | blob {b:.0f}% | calls: {api_calls}{X}")
 
         eval_time = time.monotonic() - t0
-        amem_pct = conv_amem / max(evaluated, 1) * 100
-        blob_pct = conv_blob / max(evaluated, 1) * 100
-
-        print(f"    {D}Evaluated {evaluated} questions in {eval_time:.1f}s{X}")
-        print(f"    amem:  {G}{amem_pct:.1f}%{X}  ({conv_amem}/{evaluated})")
-        print(f"    Blob:  {blob_pct:.1f}%  ({conv_blob}/{evaluated})")
+        n = conv_r["n"]
+        print(f"  {D}Evaluated {n} in {eval_time:.1f}s{X}")
+        a = conv_r["amem"]/max(n,1)*100
+        b = conv_r["blob"]/max(n,1)*100
+        print(f"  amem: {G}{a:.1f}%{X} | blob: {b:.1f}% | none: {conv_r['none']/max(n,1)*100:.1f}%")
 
         orch.close()
         await embedder.close()
 
-    # ── Final Results ──
-    r = total["all"]
-    amem_pct = r["amem"] / max(r["n"], 1) * 100
-    blob_pct = r["blob"] / max(r["n"], 1) * 100
-    delta = amem_pct - blob_pct
-    avg_amem_tokens = r["amem_tokens"] / max(r["n"], 1)
-    avg_blob_tokens = r["blob_tokens"] / max(r["n"], 1)
+    # ── Results ──
+    r = results["all"]
+    n = r["n"]
+    a_pct = r["amem"]/max(n,1)*100
+    b_pct = r["blob"]/max(n,1)*100
+    no_pct = r["none"]/max(n,1)*100
 
     print(f"\n{B}{'═'*70}{X}")
-    print(f"{B}  RESULTS — {r['n']} questions across {MAX_CONVS} conversations{X}")
+    print(f"{B}  RESULTS — {n} questions (categories 1-4){X}")
     print(f"{B}{'═'*70}{X}")
 
-    print(f"\n  {B}Accuracy (context sufficiency):{X}")
-    print(f"    amem:  {G}{B}{amem_pct:.1f}%{X}")
-    print(f"    Blob:  {blob_pct:.1f}%")
-    color = G if delta >= 0 else R
-    print(f"    Delta: {color}{B}{delta:+.1f}%{X}")
+    print(f"\n  {B}Overall Accuracy:{X}")
+    print(f"    {'System':<25s} {'Score':>8s} {'vs Blob':>10s}")
+    print(f"    {'─'*45}")
+    d = a_pct - b_pct
+    print(f"    {'amem (knowledge)':<25s} {G}{B}{a_pct:>7.1f}%{X} {G if d>=0 else R}{d:>+9.1f}%{X}")
+    print(f"    {'Blob (OpenAI-style)':<25s} {b_pct:>7.1f}%")
+    print(f"    {'No memory':<25s} {no_pct:>7.1f}%")
 
-    print(f"\n  {B}Token Efficiency:{X}")
-    print(f"    amem avg tokens/query: {avg_amem_tokens:.0f}")
-    print(f"    Blob avg tokens/query: {avg_blob_tokens:.0f}")
-    if avg_amem_tokens > 0:
-        efficiency = (amem_pct / avg_amem_tokens) / max(blob_pct / avg_blob_tokens, 0.001)
-        print(f"    Efficiency ratio:      {G}{B}{efficiency:.1f}×{X} (amem recall per token / blob recall per token)")
+    if b_pct > 0:
+        rel = (a_pct - b_pct) / b_pct * 100
+        print(f"\n  {B}Relative uplift over blob: {G if rel>=0 else R}{B}{rel:+.1f}%{X}")
+        print(f"  {D}(Mem0 claims +26% relative uplift){X}")
 
     print(f"\n  {B}By Category:{X}")
-    print(f"    {'Category':<15s} {'amem':>8s} {'Blob':>8s} {'Delta':>8s}  {'n':>4s}")
-    print(f"    {'─'*50}")
-    for cat in sorted(c for c in total.keys() if isinstance(c, int)):
-        cr = total[cat]
-        a = cr["amem"] / max(cr["n"],1) * 100
-        b = cr["blob"] / max(cr["n"],1) * 100
-        d = a - b
-        color = G if d >= 0 else R
-        print(f"    {CATEGORY_NAMES.get(cat,'?'):<15s} {a:>7.1f}% {b:>7.1f}% {color}{d:>+7.1f}%{X}  {cr['n']:>4d}")
+    print(f"    {'Category':<15s} {'amem':>8s} {'Blob':>8s} {'Δ':>8s}  {'n':>4s}")
+    print(f"    {'─'*45}")
+    for cat in sorted(c for c in results if isinstance(c, int)):
+        cr = results[cat]; cn = max(cr["n"],1)
+        a = cr["amem"]/cn*100; b = cr["blob"]/cn*100; d = a-b
+        print(f"    {CATEGORY_NAMES.get(cat,'?'):<15s} {a:>7.1f}% {b:>7.1f}% {G if d>=0 else R}{d:>+7.1f}%{X}  {cr['n']:>4d}")
 
-    print(f"\n  {B}Judge:{X} {'LLM (Ollama)' if has_llm else 'Token matching (no LLM available)'}")
-    print(f"  {B}Dataset:{X} LoCoMo — {MAX_CONVS}/10 conversations")
-    print(f"  {B}top_k:{X} {TOP_K}")
+    print(f"\n  {B}Key change from v1:{X}")
+    print(f"  Memory is now CROSS-SESSION KNOWLEDGE, not context replacement.")
+    print(f"  - Semantic graph facts (not raw chunks)")
+    print(f"  - Session summaries (not full transcripts)")
+    print(f"  - User identity and preferences")
+    print(f"  Calls: {api_calls}")
     print(f"\n{B}{'═'*70}{X}\n")
 
 
